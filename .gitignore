@@ -68,6 +68,9 @@ pnpm-lock.yaml
 yarn.lock
 drivers/
 error-screenshots/
+src/main/bundles/
+*.bundle
+.npmrc
 
 # Environment and Secrets
 .env
@@ -82,3 +85,4 @@ error-screenshots/
 .mcp.json
 temp/
 tmp/
+CLAUDE.md
