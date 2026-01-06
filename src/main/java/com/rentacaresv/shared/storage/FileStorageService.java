@@ -2,18 +2,22 @@ package com.rentacaresv.shared.storage;
 
 import com.rentacaresv.settings.domain.Settings;
 import com.rentacaresv.settings.infrastructure.SettingsRepository;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.*;
 
 import java.io.InputStream;
 import java.net.URI;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -25,11 +29,17 @@ import java.util.UUID;
 @Slf4j
 public class FileStorageService {
 
-    private final S3Client s3Client;
+    private S3Client s3Client;
     private final SettingsRepository settingsRepository;
     private final String bucketName;
     private final String baseUrl;
     private final String basePath = "rentacaresv";
+    private final String accessKey;
+    private final String secretKey;
+    private final String region;
+    private final String endpoint;
+
+    private boolean initialized = false;
 
     public FileStorageService(
             @Value("${do.spaces.key}") String accessKey,
@@ -39,114 +49,103 @@ public class FileStorageService {
             @Value("${do.spaces.endpoint}") String endpoint,
             SettingsRepository settingsRepository) {
 
+        this.accessKey = accessKey;
+        this.secretKey = secretKey;
         this.bucketName = bucketName;
+        this.region = region;
+        this.endpoint = endpoint;
         this.baseUrl = endpoint;
         this.settingsRepository = settingsRepository;
 
-        // Configurar cliente S3 para Digital Ocean Spaces
-        AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKey, secretKey);
-
-        this.s3Client = S3Client.builder()
-                .region(Region.of(region))
-                .endpointOverride(URI.create(endpoint))
-                .credentialsProvider(StaticCredentialsProvider.create(credentials))
-                .build();
-
-        log.info("FileStorageService initialized with endpoint: {}", endpoint);
+        log.info("FileStorageService constructor called with endpoint: {}", endpoint);
     }
 
-    /**
-     * Inicializa las carpetas del tenant al iniciar la aplicación
-     */
-    public void initializeTenantFolders() {
-        log.info("Inicializando carpetas del tenant...");
+    @PostConstruct
+    public void init() {
+        try {
+            log.info("Inicializando FileStorageService...");
+            log.info("Endpoint: {}", endpoint);
+            log.info("Bucket: {}", bucketName);
+            log.info("Region: {}", region);
 
-        Settings settings = settingsRepository.findGlobalSettings()
-                .orElseGet(() -> createDefaultSettings());
+            // Configurar cliente S3 para Digital Ocean Spaces
+            AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKey, secretKey);
 
-        if (!settings.getFoldersInitialized()) {
-            String tenantId = settings.getTenantId();
-            log.info("Creando estructura de carpetas para tenant: {}", tenantId);
+            S3Configuration s3Config = S3Configuration.builder()
+                    .pathStyleAccessEnabled(true)
+                    .build();
 
-            // Crear carpetas principales
-            for (FolderType folderType : FolderType.values()) {
-                createFolder(tenantId, folderType.getFolderName());
-            }
+            this.s3Client = S3Client.builder()
+                    .region(Region.of(region))
+                    .endpointOverride(URI.create(endpoint))
+                    .credentialsProvider(StaticCredentialsProvider.create(credentials))
+                    .serviceConfiguration(s3Config)
+                    .build();
 
-            // Crear subcarpetas en car_details
-            createFolder(tenantId, "car_details/delivery");
-            createFolder(tenantId, "car_details/return");
+            log.info("✅ FileStorageService initialized successfully");
+            initialized = true;
 
-            settings.markFoldersAsInitialized();
-            settingsRepository.save(settings);
-
-            log.info("Carpetas inicializadas exitosamente para tenant: {}", tenantId);
-        } else {
-            log.info("Carpetas ya estaban inicializadas para tenant: {}", settings.getTenantId());
+        } catch (Exception e) {
+            log.error("❌ Error initializing FileStorageService: {}", e.getMessage(), e);
+            log.error("La aplicación continuará pero las funciones de almacenamiento no estarán disponibles");
+            initialized = false;
         }
     }
 
     /**
-     * Crea configuración por defecto si no existe
+     * Obtiene o crea la configuración global
      */
-    private Settings createDefaultSettings() {
-        Settings settings = Settings.builder()
-                .tenantId(UUID.randomUUID().toString())
-                .companyName("RentaCar ESV")
-                .foldersInitialized(false)
-                .build();
 
-        settings = settingsRepository.save(settings);
-        log.info("Settings creados con tenant ID: {}", settings.getTenantId());
+    public Settings getOrCreateSettings() {
+        List<Settings> all = settingsRepository.findAll();
+        Settings settings;
+
+        if (all.isEmpty()) {
+            throw new IllegalStateException("❌ NO CONFIGURATION FOUND IN DATABASE");
+        } else {
+            settings = all.get(0);
+        }
+
+        // SELF-HEALING: If tenant_id is broken (empty/null), fix it immediately
+        if (settings.getTenantId() == null || settings.getTenantId().trim().isEmpty()) {
+            log.warn("⚠️ FOUND EMPTY TENANT_ID. REPAIRING RECORD...");
+            settings.setTenantId(UUID.randomUUID().toString());
+            settings = settingsRepository.save(settings);
+            log.info("✅ TENANT_ID REPAIRED: {}", settings.getTenantId());
+        }
+
+        log.info("🔍 LOADED SETTINGS: {}", settings.toString());
         return settings;
     }
 
     /**
-     * Crea una carpeta en Digital Ocean Spaces
-     */
-    private void createFolder(String tenantId, String folderName) {
-        try {
-            String key = basePath + "/" + tenantId + "/" + folderName + "/";
-
-            PutObjectRequest request = PutObjectRequest.builder()
-                    .bucket(bucketName)
-                    .key(key)
-                    .acl(ObjectCannedACL.PUBLIC_READ)
-                    .build();
-
-            s3Client.putObject(request, RequestBody.fromBytes(new byte[0]));
-            log.debug("Carpeta creada: {}", key);
-        } catch (Exception e) {
-            log.error("Error creando carpeta {}: {}", folderName, e.getMessage());
-        }
-    }
-
-    /**
      * Sube un archivo a Digital Ocean Spaces
-     *
-     * @param inputStream Stream del archivo
-     * @param fileName Nombre del archivo
-     * @param contentType Tipo de contenido (ej: image/jpeg)
-     * @param folderType Tipo de carpeta
-     * @param subFolder Subcarpeta opcional (ej: "vehicle-123" o "rental-456-delivery")
-     * @return URL pública del archivo
      */
     public String uploadFile(InputStream inputStream, String fileName, String contentType,
-                              FolderType folderType, String subFolder) {
+            FolderType folderType, String subFolder) {
 
-        Settings settings = settingsRepository.findGlobalSettings()
-                .orElseThrow(() -> new IllegalStateException("Settings no configurados"));
+        if (!initialized) {
+            throw new IllegalStateException("FileStorageService no está inicializado");
+        }
 
+        Settings settings = getOrCreateSettings();
         String tenantId = settings.getTenantId();
 
-        // Generar nombre único para el archivo
-        String uniqueFileName = generateUniqueFileName(fileName);
+        // Validación crítica
+        if (tenantId == null || tenantId.trim().isEmpty()) {
+            log.error("❌ ERROR: tenant_id es NULL o vacío en Settings ID: {}", settings.getId());
+            throw new IllegalStateException("tenant_id no puede ser NULL o vacío");
+        }
 
-        // Construir key del objeto
+        String uniqueFileName = generateUniqueFileName(fileName);
         String key = buildKey(tenantId, folderType, subFolder, uniqueFileName);
 
+        log.info("📤 Subiendo archivo: {}", fileName);
+        log.info("   - Tenant ID: {}", tenantId);
+        log.info("   - Folder Type: {}", folderType.getFolderName());
+        log.info("   - Key: {}", key);
+
         try {
-            // Subir archivo
             PutObjectRequest request = PutObjectRequest.builder()
                     .bucket(bucketName)
                     .key(key)
@@ -156,13 +155,12 @@ public class FileStorageService {
 
             s3Client.putObject(request, RequestBody.fromInputStream(inputStream, inputStream.available()));
 
-            // Construir URL pública
-            String url = baseUrl + "/" + key;
-            log.info("Archivo subido exitosamente: {}", url);
+            String url = baseUrl + "/" + bucketName + "/" + key;
+            log.info("✅ Archivo subido exitosamente: {}", url);
             return url;
 
         } catch (Exception e) {
-            log.error("Error subiendo archivo: {}", e.getMessage(), e);
+            log.error("❌ Error subiendo archivo: {}", e.getMessage(), e);
             throw new RuntimeException("Error al subir archivo: " + e.getMessage(), e);
         }
     }
@@ -171,9 +169,13 @@ public class FileStorageService {
      * Elimina un archivo de Digital Ocean Spaces
      */
     public void deleteFile(String fileUrl) {
+        if (!initialized) {
+            log.warn("Saltando eliminación de archivo: servicio no inicializado");
+            return;
+        }
+
         try {
-            // Extraer key de la URL
-            String key = fileUrl.replace(baseUrl + "/", "");
+            String key = extractKeyFromUrl(fileUrl);
 
             DeleteObjectRequest request = DeleteObjectRequest.builder()
                     .bucket(bucketName)
@@ -193,9 +195,12 @@ public class FileStorageService {
      * Lista archivos en una carpeta
      */
     public List<String> listFiles(FolderType folderType, String subFolder) {
-        Settings settings = settingsRepository.findGlobalSettings()
-                .orElseThrow(() -> new IllegalStateException("Settings no configurados"));
+        if (!initialized) {
+            log.warn("Saltando listado de archivos: servicio no inicializado");
+            return new ArrayList<>();
+        }
 
+        Settings settings = getOrCreateSettings();
         String prefix = buildPrefix(settings.getTenantId(), folderType, subFolder);
         List<String> fileUrls = new ArrayList<>();
 
@@ -208,7 +213,7 @@ public class FileStorageService {
             ListObjectsV2Response response = s3Client.listObjectsV2(request);
 
             for (S3Object s3Object : response.contents()) {
-                String url = baseUrl + "/" + s3Object.key();
+                String url = baseUrl + "/" + bucketName + "/" + s3Object.key();
                 fileUrls.add(url);
             }
 
@@ -226,6 +231,10 @@ public class FileStorageService {
         return settingsRepository.findGlobalSettings()
                 .map(Settings::getTenantId)
                 .orElse(null);
+    }
+
+    public boolean isInitialized() {
+        return initialized;
     }
 
     // ========================================
@@ -254,6 +263,17 @@ public class FileStorageService {
 
         prefix.append("/");
         return prefix.toString();
+    }
+
+    private String extractKeyFromUrl(String fileUrl) {
+        // Extraer key de la URL
+        // Formato: https://sfo3.digitaloceanspaces.com/tecnoipobjects/rentacaresv/...
+        String[] parts = fileUrl.split(bucketName + "/");
+        if (parts.length > 1) {
+            return parts[1];
+        }
+        // Fallback: quitar el baseUrl
+        return fileUrl.replace(baseUrl + "/", "").replace(bucketName + "/", "");
     }
 
     private String generateUniqueFileName(String originalFileName) {

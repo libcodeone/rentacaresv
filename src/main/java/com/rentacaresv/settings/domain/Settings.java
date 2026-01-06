@@ -1,8 +1,8 @@
 package com.rentacaresv.settings.domain;
 
 import jakarta.persistence.*;
-import lombok.*;
 
+import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
@@ -11,19 +11,14 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "settings")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-@ToString
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
-public class Settings {
+public class Settings implements Serializable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @EqualsAndHashCode.Include
     private Long id;
+
+    // Serial id
+    private static final long serialVersionUID = 1L;
 
     /**
      * Identificador único del tenant (cliente SaaS)
@@ -48,7 +43,6 @@ public class Settings {
      * Indica si las carpetas ya fueron inicializadas en DO Spaces
      */
     @Column(name = "folders_initialized", nullable = false)
-    @Builder.Default
     private Boolean foldersInitialized = false;
 
     // ========================================
@@ -56,11 +50,30 @@ public class Settings {
     // ========================================
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    // ========================================
+    // Getters/Setters explícitos (workaround Lombok)
+    // ========================================
+
+    /**
+     * Obtiene el tenant ID
+     * IMPORTANTE: Getter explícito para evitar problemas con Lombok
+     */
+    public String getTenantId() {
+        return this.tenantId;
+    }
+
+    /**
+     * Establece el tenant ID
+     * IMPORTANTE: Setter explícito para evitar problemas con Lombok
+     */
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
 
     // ========================================
     // Métodos de Negocio
@@ -88,5 +101,94 @@ public class Settings {
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
+    }
+
+    /**
+     * Getters and setters
+     */
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getCompanyName() {
+        return companyName;
+    }
+
+    public void setCompanyName(String companyName) {
+        this.companyName = companyName;
+    }
+
+    public String getLogoUrl() {
+        return logoUrl;
+    }
+
+    public void setLogoUrl(String logoUrl) {
+        this.logoUrl = logoUrl;
+    }
+
+    public Boolean getFoldersInitialized() {
+        return foldersInitialized;
+    }
+
+    public void setFoldersInitialized(Boolean foldersInitialized) {
+        this.foldersInitialized = foldersInitialized;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    public Settings(Long id, String tenantId, String companyName, String logoUrl, Boolean foldersInitialized,
+            LocalDateTime createdAt, LocalDateTime updatedAt) {
+        this.id = id;
+        this.tenantId = tenantId;
+        this.companyName = companyName;
+        this.logoUrl = logoUrl;
+        this.foldersInitialized = foldersInitialized;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+    }
+
+    public Settings() {
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        // TODO Auto-generated method stub
+        return super.equals(obj);
+    }
+
+    @Override
+    public int hashCode() {
+        // TODO Auto-generated method stub
+        return super.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return "Settings{" +
+                "id=" + id +
+                ", tenantId='" + tenantId + '\'' +
+                ", companyName='" + companyName + '\'' +
+                ", logoUrl='" + logoUrl + '\'' +
+                ", foldersInitialized=" + foldersInitialized +
+                '}';
     }
 }
