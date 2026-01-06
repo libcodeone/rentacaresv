@@ -25,6 +25,8 @@ public class VehicleDTO {
     private String color;
     private String transmissionType;
     private String fuelType;
+    private String vehicleType;
+    private String vehicleTypeLabel;
     private Integer passengerCapacity;
     private Integer mileage;
     

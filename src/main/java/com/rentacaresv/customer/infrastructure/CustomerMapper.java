@@ -31,6 +31,9 @@ public class CustomerMapper {
                 .phone(customer.getPhone())
                 .address(customer.getAddress())
                 .birthDate(customer.getBirthDate())
+                .driverLicenseNumber(customer.getDriverLicenseNumber())
+                .driverLicenseCountry(customer.getDriverLicenseCountry())
+                .driverLicenseExpiry(customer.getDriverLicenseExpiry())
                 .category(customer.getCategory().name())
                 .notes(customer.getNotes())
                 .active(customer.getActive())
@@ -38,6 +41,9 @@ public class CustomerMapper {
                 .age(customer.getAge())
                 .isVip(customer.isVip())
                 .isActiveCustomer(customer.isActiveCustomer())
+                .hasDriverLicense(customer.hasDriverLicense())
+                .canRentVehicle(customer.canRentVehicle())
+                .cannotRentReason(customer.getCannotRentReason())
                 .build();
     }
 

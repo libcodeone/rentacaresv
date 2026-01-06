@@ -6,15 +6,14 @@ import com.vaadin.flow.theme.Theme;
 import com.vaadin.flow.theme.lumo.Lumo;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 /**
  * The entry point of the Spring Boot application.
- *
- * Use the @PWA annotation make the application installable on phones, tablets
- * and some desktop browsers.
- *
  */
 @SpringBootApplication
+@org.springframework.boot.persistence.autoconfigure.EntityScan(basePackages = "com.rentacaresv")
+@EnableJpaRepositories(basePackages = "com.rentacaresv")
 @StyleSheet(Lumo.STYLESHEET)
 @StyleSheet("styles.css")
 @Theme(value = "rentacaresv")

@@ -71,7 +71,7 @@ public class CustomerListView extends VerticalLayout {
         
         Span vipCounter = new Span(String.format("VIP: %d", vipCount));
         vipCounter.getStyle()
-            .set("color", "var(--lumo-warning-color)")
+            .set("color", "#7c5800")
             .set("font-weight", "bold")
             .set("padding", "0.5rem 1rem")
             .set("background", "var(--lumo-warning-color-10pct)")
@@ -79,7 +79,7 @@ public class CustomerListView extends VerticalLayout {
         
         Span totalCounter = new Span(String.format("Total: %d", totalCount));
         totalCounter.getStyle()
-            .set("color", "var(--lumo-primary-color)")
+            .set("color", "var(--lumo-primary-text-color)")
             .set("font-weight", "bold")
             .set("padding", "0.5rem 1rem")
             .set("background", "var(--lumo-primary-color-10pct)")
@@ -280,13 +280,34 @@ public class CustomerListView extends VerticalLayout {
     }
 
     private void deleteCustomer(CustomerDTO customer) {
-        try {
-            customerService.deleteCustomer(customer.getId());
-            updateGrid();
-            showSuccessNotification("Cliente eliminado exitosamente");
-        } catch (Exception e) {
-            showErrorNotification("Error al eliminar: " + e.getMessage());
-        }
+        // Diálogo de confirmación
+        com.vaadin.flow.component.confirmdialog.ConfirmDialog confirmDialog = 
+            new com.vaadin.flow.component.confirmdialog.ConfirmDialog();
+        
+        confirmDialog.setHeader("Eliminar Cliente");
+        confirmDialog.setText(
+            String.format("¿Está seguro de eliminar al cliente %s (Doc: %s)?\n\n" +
+                         "Esta acción no se puede deshacer.",
+                customer.getFullName(), customer.getDocumentNumber())
+        );
+        
+        confirmDialog.setCancelable(true);
+        confirmDialog.setCancelText("Cancelar");
+        
+        confirmDialog.setConfirmText("Eliminar");
+        confirmDialog.setConfirmButtonTheme("error primary");
+        
+        confirmDialog.addConfirmListener(event -> {
+            try {
+                customerService.deleteCustomer(customer.getId());
+                updateGrid();
+                showSuccessNotification("Cliente eliminado exitosamente");
+            } catch (Exception e) {
+                showErrorNotification("Error al eliminar: " + e.getMessage());
+            }
+        });
+        
+        confirmDialog.open();
     }
 
     private void updateGrid() {

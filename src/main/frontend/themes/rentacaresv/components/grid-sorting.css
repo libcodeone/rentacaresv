@@ -1,0 +1,31 @@
+/**
+ * Estilos mejorados para ordenamiento de Grid en Vaadin
+ * - Cursor pointer en columnas ordenables
+ * - Iconos de ordenamiento más grandes y visibles
+ */
+
+/* Header de columna ordenable - cursor pointer */
+vaadin-grid-sorter {
+  cursor: pointer !important;
+  transition: background-color 0.15s ease;
+}
+
+/* Hover effect en headers ordenables */
+vaadin-grid-sorter:hover {
+  background-color: var(--lumo-contrast-5pct);
+}
+
+/* Indicadores de orden más visibles */
+vaadin-grid-sorter [part="indicators"] {
+  margin-left: 6px;
+}
+
+/* Cuando tiene dirección activa - resaltar */
+vaadin-grid-sorter[direction] {
+  background-color: var(--lumo-primary-color-10pct);
+}
+
+vaadin-grid-sorter[direction] [part="content"] {
+  color: var(--lumo-primary-color);
+  font-weight: 600;
+}

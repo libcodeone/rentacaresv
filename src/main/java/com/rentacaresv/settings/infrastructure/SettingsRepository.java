@@ -4,6 +4,7 @@ import com.rentacaresv.settings.domain.Settings;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -21,6 +22,12 @@ public interface SettingsRepository extends JpaRepository<Settings, Long> {
      */
     @Query("SELECT s FROM Settings s ORDER BY s.id ASC")
     Optional<Settings> findGlobalSettings();
+
+    /**
+     * Find all Settings
+     */
+    @Query(value = "SELECT * FROM settings ORDER BY id ASC", nativeQuery = true)
+    List<Settings> findAllSettings();
 
     /**
      * Verifica si ya existe configuración

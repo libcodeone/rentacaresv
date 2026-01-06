@@ -51,6 +51,10 @@ public class Vehicle {
     @Column(name = "fuel_type", nullable = false)
     private FuelType fuelType;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "vehicle_type")
+    private VehicleType vehicleType;
+
     @Column(name = "passenger_capacity", nullable = false)
     private Integer passengerCapacity;
 

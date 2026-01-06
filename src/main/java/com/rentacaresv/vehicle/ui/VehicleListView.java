@@ -1,7 +1,9 @@
 package com.rentacaresv.vehicle.ui;
 
+import com.rentacaresv.catalog.application.CatalogService;
 import com.rentacaresv.shared.util.FormatUtils;
 import com.rentacaresv.vehicle.application.VehicleDTO;
+import com.rentacaresv.vehicle.application.VehiclePhotoService;
 import com.rentacaresv.vehicle.application.VehicleService;
 import com.rentacaresv.vehicle.domain.VehicleStatus;
 import com.rentacaresv.views.MainLayout;
@@ -11,6 +13,7 @@ import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.component.html.Image;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
@@ -26,9 +29,7 @@ import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 import org.vaadin.lineawesome.LineAwesomeIconUrl;
 
-import java.text.NumberFormat;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Vista de gestión de vehículos
@@ -41,14 +42,20 @@ import java.util.Locale;
 public class VehicleListView extends VerticalLayout {
 
     private final VehicleService vehicleService;
+    private final VehiclePhotoService vehiclePhotoService;
+    private final CatalogService catalogService;
     
     private Grid<VehicleDTO> grid;
     private TextField searchField;
     private ComboBox<VehicleStatus> statusFilter;
     private Button addButton;
 
-    public VehicleListView(VehicleService vehicleService) {
+    public VehicleListView(VehicleService vehicleService, 
+                          VehiclePhotoService vehiclePhotoService,
+                          CatalogService catalogService) {
         this.vehicleService = vehicleService;
+        this.vehiclePhotoService = vehiclePhotoService;
+        this.catalogService = catalogService;
         
         setSizeFull();
         setPadding(true);
@@ -72,7 +79,7 @@ public class VehicleListView extends VerticalLayout {
         long availableCount = vehicleService.countAvailableVehicles();
         Span counter = new Span(String.format("Disponibles: %d", availableCount));
         counter.getStyle()
-            .set("color", "var(--lumo-success-color)")
+            .set("color", "var(--lumo-success-text-color)")
             .set("font-weight", "bold")
             .set("padding", "0.5rem 1rem")
             .set("background", "var(--lumo-success-color-10pct)")
@@ -132,6 +139,12 @@ public class VehicleListView extends VerticalLayout {
         grid = new Grid<>(VehicleDTO.class, false);
         grid.setSizeFull();
         
+        // Columna de Foto
+        grid.addComponentColumn(this::createThumbnail)
+            .setHeader("Foto")
+            .setWidth("80px")
+            .setFlexGrow(0);
+        
         // Columnas
         grid.addColumn(VehicleDTO::getLicensePlate)
             .setHeader("Placa")
@@ -179,6 +192,41 @@ public class VehicleListView extends VerticalLayout {
             .set("border-radius", "var(--lumo-border-radius-m)");
 
         return grid;
+    }
+
+    private Component createThumbnail(VehicleDTO vehicle) {
+        String photoUrl = vehiclePhotoService.getPrimaryPhotoUrl(vehicle.getId());
+        
+        if (photoUrl != null) {
+            Image thumbnail = new Image(photoUrl, "Vehículo");
+            thumbnail.setWidth("60px");
+            thumbnail.setHeight("45px");
+            thumbnail.getStyle()
+                .set("object-fit", "cover")
+                .set("border-radius", "4px")
+                .set("border", "1px solid var(--lumo-contrast-20pct)");
+            return thumbnail;
+        } else {
+            // Placeholder bonito con ícono vectorial
+            var icon = VaadinIcon.CAR.create();
+            icon.setSize("40px");
+            icon.getStyle()
+                .set("color", "var(--lumo-contrast-50pct)");
+            
+            VerticalLayout placeholder = new VerticalLayout(icon);
+            placeholder.setWidth("60px");
+            placeholder.setHeight("45px");
+            placeholder.setJustifyContentMode(FlexComponent.JustifyContentMode.CENTER);
+            placeholder.setAlignItems(FlexComponent.Alignment.CENTER);
+            placeholder.setPadding(false);
+            placeholder.setSpacing(false);
+            placeholder.getStyle()
+                .set("background", "var(--lumo-contrast-5pct)")
+                .set("border-radius", "4px")
+                .set("border", "1px solid var(--lumo-contrast-20pct)");
+            
+            return placeholder;
+        }
     }
 
     private Component createStatusBadge(String status) {
@@ -229,7 +277,8 @@ public class VehicleListView extends VerticalLayout {
     }
 
     private void openVehicleDialog(VehicleDTO vehicle) {
-        VehicleFormDialog dialog = new VehicleFormDialog(vehicleService, vehicle);
+        VehicleFormDialog dialog = new VehicleFormDialog(
+            vehicleService, vehiclePhotoService, catalogService, vehicle);
         dialog.addSaveListener(e -> {
             updateGrid();
             showSuccessNotification(
@@ -240,13 +289,34 @@ public class VehicleListView extends VerticalLayout {
     }
 
     private void deleteVehicle(VehicleDTO vehicle) {
-        try {
-            vehicleService.deleteVehicle(vehicle.getId());
-            updateGrid();
-            showSuccessNotification("Vehículo eliminado exitosamente");
-        } catch (Exception e) {
-            showErrorNotification("Error al eliminar: " + e.getMessage());
-        }
+        // Diálogo de confirmación
+        com.vaadin.flow.component.confirmdialog.ConfirmDialog confirmDialog = 
+            new com.vaadin.flow.component.confirmdialog.ConfirmDialog();
+        
+        confirmDialog.setHeader("Eliminar Vehículo");
+        confirmDialog.setText(
+            String.format("¿Está seguro de eliminar el vehículo %s %s (Placa: %s)?\n\n" +
+                         "Esta acción no se puede deshacer.",
+                vehicle.getBrand(), vehicle.getModel(), vehicle.getLicensePlate())
+        );
+        
+        confirmDialog.setCancelable(true);
+        confirmDialog.setCancelText("Cancelar");
+        
+        confirmDialog.setConfirmText("Eliminar");
+        confirmDialog.setConfirmButtonTheme("error primary");
+        
+        confirmDialog.addConfirmListener(event -> {
+            try {
+                vehicleService.deleteVehicle(vehicle.getId());
+                updateGrid();
+                showSuccessNotification("Vehículo eliminado exitosamente");
+            } catch (Exception e) {
+                showErrorNotification("Error al eliminar: " + e.getMessage());
+            }
+        });
+        
+        confirmDialog.open();
     }
 
     private void updateGrid() {

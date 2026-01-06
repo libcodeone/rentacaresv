@@ -12,6 +12,8 @@ import com.rentacaresv.vehicle.infrastructure.VehicleRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
@@ -110,15 +112,22 @@ public class RentalService {
     }
 
     /**
-     * Entrega el vehículo al cliente (inicia la renta)
+     * Entrega el vehículo al cliente (inicia la renta) - CON NOTAS
      */
-    public void deliverVehicle(Long rentalId) {
+    public void deliverRental(Long rentalId, String notes) {
         log.info("Entregando vehículo de la renta {}", rentalId);
         
         Rental rental = rentalRepository.findById(rentalId)
                 .orElseThrow(() -> new IllegalArgumentException("Renta no encontrada"));
         
         rental.deliverVehicle(); // Lógica de dominio
+        
+        // Agregar notas de entrega si existen
+        if (notes != null && !notes.isBlank()) {
+            String currentNotes = rental.getNotes() != null ? rental.getNotes() : "";
+            rental.setNotes(currentNotes + "\n\n=== ENTREGA ===\n" + notes);
+        }
+        
         rentalRepository.save(rental);
         
         log.info("Vehículo {} entregado a {}", 
@@ -127,15 +136,37 @@ public class RentalService {
     }
 
     /**
-     * Devuelve el vehículo (finaliza la renta)
+     * Entrega el vehículo al cliente (inicia la renta)
      */
-    public void returnVehicle(Long rentalId) {
+    public void deliverVehicle(Long rentalId) {
+        deliverRental(rentalId, null);
+    }
+
+    /**
+     * Devuelve el vehículo (finaliza la renta) - CON NOTAS Y MANTENIMIENTO
+     */
+    public void returnRental(Long rentalId, String notes, boolean needsMaintenance) {
         log.info("Devolviendo vehículo de la renta {}", rentalId);
         
         Rental rental = rentalRepository.findById(rentalId)
                 .orElseThrow(() -> new IllegalArgumentException("Renta no encontrada"));
         
         rental.returnVehicle(); // Lógica de dominio
+        
+        // Agregar notas de devolución si existen
+        if (notes != null && !notes.isBlank()) {
+            String currentNotes = rental.getNotes() != null ? rental.getNotes() : "";
+            rental.setNotes(currentNotes + "\n\n=== DEVOLUCIÓN ===\n" + notes);
+        }
+        
+        // Si requiere mantenimiento, cambiar estado del vehículo
+        if (needsMaintenance) {
+            Vehicle vehicle = rental.getVehicle();
+            vehicle.sendToMaintenance();
+            vehicleRepository.save(vehicle);
+            log.warn("Vehículo {} enviado a mantenimiento", vehicle.getLicensePlate());
+        }
+        
         rentalRepository.save(rental);
         
         log.info("Vehículo {} devuelto. Renta completada.", 
@@ -148,6 +179,13 @@ public class RentalService {
                 rental.getDelayDays(),
                 rental.calculateDelayPenalty());
         }
+    }
+
+    /**
+     * Devuelve el vehículo (finaliza la renta)
+     */
+    public void returnVehicle(Long rentalId) {
+        returnRental(rentalId, null, false);
     }
 
     /**
@@ -187,6 +225,22 @@ public class RentalService {
         Rental rental = rentalRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Renta no encontrada con ID: " + id));
         return rentalMapper.toDTO(rental);
+    }
+
+    /**
+     * Obtiene la entidad Rental por ID (para generación de PDF)
+     * Carga todas las relaciones necesarias (Customer, Vehicle)
+     */
+    @Transactional(readOnly = true)
+    public Rental findRentalEntityById(Long id) {
+        Rental rental = rentalRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Renta no encontrada con ID: " + id));
+        
+        // Forzar carga de relaciones lazy (para uso fuera de transacción)
+        rental.getCustomer().getFullName(); // Inicializa Customer
+        rental.getVehicle().getBrand(); // Inicializa Vehicle
+        
+        return rental;
     }
 
     /**
@@ -308,5 +362,59 @@ public class RentalService {
         } while (rentalRepository.existsByContractNumber(contractNumber));
         
         return contractNumber;
+    }
+
+    // ========================================
+    // Métodos con Paginación (para Lazy Loading en UI)
+    // ========================================
+
+    /**
+     * Obtiene rentas paginadas (todas)
+     */
+    @Transactional(readOnly = true)
+    public Page<RentalDTO> findAllPaged(Pageable pageable) {
+        Page<Rental> page = rentalRepository.findAllActivePaged(pageable);
+        return page.map(rentalMapper::toDTO);
+    }
+
+    /**
+     * Obtiene rentas paginadas por estado
+     */
+    @Transactional(readOnly = true)
+    public Page<RentalDTO> findByStatusPaged(RentalStatus status, Pageable pageable) {
+        Page<Rental> page = rentalRepository.findByStatusPaged(status, pageable);
+        return page.map(rentalMapper::toDTO);
+    }
+
+    /**
+     * Busca rentas paginadas por término de búsqueda
+     */
+    @Transactional(readOnly = true)
+    public Page<RentalDTO> searchRentals(String searchTerm, Pageable pageable) {
+        if (searchTerm == null || searchTerm.isBlank()) {
+            return findAllPaged(pageable);
+        }
+        Page<Rental> page = rentalRepository.searchRentals(searchTerm, pageable);
+        return page.map(rentalMapper::toDTO);
+    }
+
+    /**
+     * Busca rentas paginadas por estado y término de búsqueda
+     */
+    @Transactional(readOnly = true)
+    public Page<RentalDTO> searchRentalsByStatus(RentalStatus status, String searchTerm, Pageable pageable) {
+        if (searchTerm == null || searchTerm.isBlank()) {
+            return findByStatusPaged(status, pageable);
+        }
+        Page<Rental> page = rentalRepository.searchRentalsByStatus(status, searchTerm, pageable);
+        return page.map(rentalMapper::toDTO);
+    }
+
+    /**
+     * Cuenta total de rentas activas
+     */
+    @Transactional(readOnly = true)
+    public long countAllActive() {
+        return rentalRepository.countAllActive();
     }
 }

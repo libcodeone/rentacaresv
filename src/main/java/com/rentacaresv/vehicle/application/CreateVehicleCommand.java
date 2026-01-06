@@ -44,6 +44,8 @@ public class CreateVehicleCommand {
     @NotBlank(message = "El tipo de combustible es obligatorio")
     private String fuelType;
 
+    private String vehicleType;
+
     @NotNull(message = "La capacidad de pasajeros es obligatoria")
     @Min(value = 1, message = "Debe tener al menos 1 pasajero")
     @Max(value = 50, message = "No puede tener más de 50 pasajeros")
