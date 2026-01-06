@@ -4,6 +4,7 @@ import com.rentacaresv.vehicle.domain.FuelType;
 import com.rentacaresv.vehicle.domain.TransmissionType;
 import com.rentacaresv.vehicle.domain.Vehicle;
 import com.rentacaresv.vehicle.domain.VehicleStatus;
+import com.rentacaresv.vehicle.domain.VehicleType;
 import com.rentacaresv.vehicle.infrastructure.VehicleMapper;
 import com.rentacaresv.vehicle.infrastructure.VehicleRepository;
 import jakarta.validation.Valid;
@@ -31,15 +32,16 @@ public class VehicleService {
 
     /**
      * Crea un nuevo vehículo
+     * 
+     * @return ID del vehículo creado
      */
-    public VehicleDTO createVehicle(@Valid CreateVehicleCommand command) {
+    public Long createVehicle(@Valid CreateVehicleCommand command) {
         log.info("Creando vehículo con placa: {}", command.getLicensePlate());
 
         // Validar que no exista la placa
         if (vehicleRepository.existsByLicensePlate(command.getLicensePlate())) {
             throw new IllegalArgumentException(
-                "Ya existe un vehículo con la placa: " + command.getLicensePlate()
-            );
+                    "Ya existe un vehículo con la placa: " + command.getLicensePlate());
         }
 
         // Crear entidad de dominio
@@ -51,6 +53,7 @@ public class VehicleService {
                 .color(command.getColor())
                 .transmissionType(TransmissionType.valueOf(command.getTransmissionType().toUpperCase()))
                 .fuelType(FuelType.valueOf(command.getFuelType().toUpperCase()))
+                .vehicleType(command.getVehicleType() != null ? VehicleType.valueOf(command.getVehicleType()) : null)
                 .passengerCapacity(command.getPassengerCapacity())
                 .mileage(command.getMileage() != null ? command.getMileage() : 0)
                 .priceNormal(command.getPriceNormal())
@@ -63,10 +66,47 @@ public class VehicleService {
 
         // Persistir
         vehicle = vehicleRepository.save(vehicle);
-        
-        log.info("Vehículo creado exitosamente: {}", vehicle.getFullDescription());
-        
-        return vehicleMapper.toDTO(vehicle);
+
+        log.info("Vehículo creado exitosamente: {} con ID: {}", vehicle.getFullDescription(), vehicle.getId());
+
+        return vehicle.getId();
+    }
+
+    /**
+     * Actualiza un vehículo existente
+     */
+    public void updateVehicle(Long id, @Valid CreateVehicleCommand command) {
+        log.info("Actualizando vehículo ID: {}", id);
+
+        Vehicle vehicle = vehicleRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Vehículo no encontrado"));
+
+        // Validar si la placa cambió y si ya existe otra placa igual
+        if (!vehicle.getLicensePlate().equalsIgnoreCase(command.getLicensePlate()) &&
+                vehicleRepository.existsByLicensePlate(command.getLicensePlate())) {
+            throw new IllegalArgumentException("Ya existe otro vehículo con la placa: " + command.getLicensePlate());
+        }
+
+        // Actualizar campos
+        vehicle.setBrand(command.getBrand());
+        vehicle.setModel(command.getModel());
+        vehicle.setYear(command.getYear());
+        vehicle.setColor(command.getColor());
+        vehicle.setTransmissionType(TransmissionType.valueOf(command.getTransmissionType()));
+        vehicle.setFuelType(FuelType.valueOf(command.getFuelType()));
+        vehicle.setVehicleType(command.getVehicleType() != null ? VehicleType.valueOf(command.getVehicleType()) : null);
+        vehicle.setPassengerCapacity(command.getPassengerCapacity());
+        vehicle.setMileage(command.getMileage());
+        vehicle.setPriceNormal(command.getPriceNormal());
+        vehicle.setPriceVip(command.getPriceVip());
+        vehicle.setPriceMoreThan15Days(command.getPriceMoreThan15Days());
+        vehicle.setPriceMonthly(command.getPriceMonthly());
+        vehicle.setNotes(command.getNotes());
+
+        // El estado y otros campos de negocio no se cambian aquí directamente
+
+        vehicleRepository.save(vehicle);
+        log.info("Vehículo actualizado exitosamente: {}", id);
     }
 
     /**
@@ -123,7 +163,7 @@ public class VehicleService {
         log.info("Marcando vehículo {} como rentado", vehicleId);
         Vehicle vehicle = vehicleRepository.findById(vehicleId)
                 .orElseThrow(() -> new IllegalArgumentException("Vehículo no encontrado"));
-        
+
         vehicle.markAsRented(); // Lógica de dominio
         vehicleRepository.save(vehicle);
     }
@@ -135,7 +175,7 @@ public class VehicleService {
         log.info("Marcando vehículo {} como disponible", vehicleId);
         Vehicle vehicle = vehicleRepository.findById(vehicleId)
                 .orElseThrow(() -> new IllegalArgumentException("Vehículo no encontrado"));
-        
+
         vehicle.markAsAvailable(); // Lógica de dominio
         vehicleRepository.save(vehicle);
     }
@@ -147,9 +187,39 @@ public class VehicleService {
         log.info("Enviando vehículo {} a mantenimiento", vehicleId);
         Vehicle vehicle = vehicleRepository.findById(vehicleId)
                 .orElseThrow(() -> new IllegalArgumentException("Vehículo no encontrado"));
-        
+
         vehicle.sendToMaintenance(); // Lógica de dominio
         vehicleRepository.save(vehicle);
+    }
+
+    /**
+     * Actualiza el estado de un vehículo
+     * No permite cambiar a RENTED (eso se hace automáticamente al crear una renta)
+     */
+    public void updateVehicleStatus(Long vehicleId, VehicleStatus newStatus) {
+        log.info("Actualizando estado del vehículo {} a {}", vehicleId, newStatus);
+        
+        if (newStatus == VehicleStatus.RENTED) {
+            throw new IllegalArgumentException("El estado 'Rentado' solo se puede asignar al crear una renta");
+        }
+        
+        Vehicle vehicle = vehicleRepository.findById(vehicleId)
+                .orElseThrow(() -> new IllegalArgumentException("Vehículo no encontrado"));
+        
+        // Si está rentado, no se puede cambiar el estado manualmente
+        if (vehicle.getStatus() == VehicleStatus.RENTED) {
+            throw new IllegalArgumentException("No se puede cambiar el estado de un vehículo rentado. Debe completar o cancelar la renta primero.");
+        }
+        
+        switch (newStatus) {
+            case AVAILABLE -> vehicle.markAsAvailable();
+            case MAINTENANCE -> vehicle.sendToMaintenance();
+            case OUT_OF_SERVICE -> vehicle.setStatus(VehicleStatus.OUT_OF_SERVICE);
+            default -> throw new IllegalArgumentException("Estado no válido");
+        }
+        
+        vehicleRepository.save(vehicle);
+        log.info("Estado del vehículo {} actualizado a {}", vehicleId, newStatus);
     }
 
     /**
@@ -159,7 +229,7 @@ public class VehicleService {
         log.info("Actualizando kilometraje del vehículo {} a {}", vehicleId, newMileage);
         Vehicle vehicle = vehicleRepository.findById(vehicleId)
                 .orElseThrow(() -> new IllegalArgumentException("Vehículo no encontrado"));
-        
+
         vehicle.updateMileage(newMileage); // Lógica de dominio
         vehicleRepository.save(vehicle);
     }
@@ -171,7 +241,7 @@ public class VehicleService {
         log.info("Eliminando vehículo {}", vehicleId);
         Vehicle vehicle = vehicleRepository.findById(vehicleId)
                 .orElseThrow(() -> new IllegalArgumentException("Vehículo no encontrado"));
-        
+
         vehicle.delete(); // Lógica de dominio
         vehicleRepository.save(vehicle);
     }

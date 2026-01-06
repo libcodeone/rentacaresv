@@ -46,6 +46,12 @@ public class CustomerFormDialog extends Dialog {
     private TextField phone;
     private TextArea address;
     private DatePicker birthDate;
+    
+    // Licencia de conducir
+    private TextField driverLicenseNumber;
+    private TextField driverLicenseCountry;
+    private DatePicker driverLicenseExpiry;
+    
     private ComboBox<CustomerCategory> category;
     private TextArea notes;
     
@@ -105,6 +111,26 @@ public class CustomerFormDialog extends Dialog {
         birthDate.setMax(LocalDate.now().minusYears(18)); // Mínimo 18 años
         birthDate.setPlaceholder("dd/MM/yyyy");
         
+        // Licencia de conducir (REQUERIDO para rentar)
+        driverLicenseNumber = new TextField("🚦 Número de Licencia");
+        driverLicenseNumber.setPlaceholder("Ej: L-123456 o DUI-12345678-9");
+        driverLicenseNumber.setRequired(true);
+        driverLicenseNumber.setMaxLength(50);
+        driverLicenseNumber.setHelperText("Requerido para rentar vehículos");
+        
+        driverLicenseCountry = new TextField("🌍 País Emisor (Código)");
+        driverLicenseCountry.setPlaceholder("SLV");
+        driverLicenseCountry.setValue("SLV"); // Default El Salvador
+        driverLicenseCountry.setMaxLength(3);
+        driverLicenseCountry.setHelperText("ISO 3166-1 (SLV, USA, MEX, etc.)");
+        driverLicenseCountry.setPattern("[A-Z]{3}");
+        driverLicenseCountry.setAllowedCharPattern("[A-Z]");
+        
+        driverLicenseExpiry = new DatePicker("📅 Vencimiento (Opcional)");
+        driverLicenseExpiry.setLocale(new Locale("es", "SV"));
+        driverLicenseExpiry.setPlaceholder("dd/MM/yyyy");
+        driverLicenseExpiry.setHelperText("Informativo - no bloquea rentas");
+        
         // Información de contacto
         email = new EmailField("Email");
         email.setPlaceholder("cliente@ejemplo.com");
@@ -145,6 +171,11 @@ public class CustomerFormDialog extends Dialog {
         formLayout.add(fullName, 2);
         formLayout.add(documentType, documentNumber);
         formLayout.add(birthDate, category);
+        
+        // Sección de licencia (destacada)
+        formLayout.add(driverLicenseNumber, 2);
+        formLayout.add(driverLicenseCountry, driverLicenseExpiry);
+        
         formLayout.add(email, phone);
         formLayout.add(address, 2);
         formLayout.add(notes, 2);
@@ -162,6 +193,9 @@ public class CustomerFormDialog extends Dialog {
         binder.forField(phone).bind("phone");
         binder.forField(address).bind("address");
         binder.forField(birthDate).bind("birthDate");
+        binder.forField(driverLicenseNumber).bind("driverLicenseNumber");
+        binder.forField(driverLicenseCountry).bind("driverLicenseCountry");
+        binder.forField(driverLicenseExpiry).bind("driverLicenseExpiry");
         binder.forField(category)
             .withConverter(
                 cat -> cat != null ? cat.name() : null,
@@ -207,6 +241,17 @@ public class CustomerFormDialog extends Dialog {
         if (customer.getPhone() != null) phone.setValue(customer.getPhone());
         if (customer.getAddress() != null) address.setValue(customer.getAddress());
         if (customer.getBirthDate() != null) birthDate.setValue(customer.getBirthDate());
+        
+        // Licencia de conducir
+        if (customer.getDriverLicenseNumber() != null) {
+            driverLicenseNumber.setValue(customer.getDriverLicenseNumber());
+        }
+        if (customer.getDriverLicenseCountry() != null) {
+            driverLicenseCountry.setValue(customer.getDriverLicenseCountry());
+        }
+        if (customer.getDriverLicenseExpiry() != null) {
+            driverLicenseExpiry.setValue(customer.getDriverLicenseExpiry());
+        }
         
         category.setValue(CustomerCategory.valueOf(customer.getCategory()));
         
