@@ -80,7 +80,7 @@ public class PaymentListView extends VerticalLayout {
         
         Span todayCounter = new Span(String.format("Hoy: %s", FormatUtils.formatPrice(todayIncome)));
         todayCounter.getStyle()
-            .set("color", "var(--lumo-success-color)")
+            .set("color", "var(--lumo-success-text-color)")
             .set("font-weight", "bold")
             .set("padding", "0.5rem 1rem")
             .set("background", "var(--lumo-success-color-10pct)")
@@ -88,7 +88,7 @@ public class PaymentListView extends VerticalLayout {
         
         Span monthCounter = new Span(String.format("Este mes: %s", FormatUtils.formatPrice(monthIncome)));
         monthCounter.getStyle()
-            .set("color", "var(--lumo-primary-color)")
+            .set("color", "var(--lumo-primary-text-color)")
             .set("font-weight", "bold")
             .set("padding", "0.5rem 1rem")
             .set("background", "var(--lumo-primary-color-10pct)")

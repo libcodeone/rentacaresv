@@ -1,0 +1,184 @@
+name: Build and Deploy RentaCar ESV
+
+on:
+  push:
+    branches: [ main, prod ]
+  pull_request:
+    branches: [ main, prod ]
+  workflow_dispatch:  # Permite ejecución manual
+
+env:
+  JAVA_VERSION: '21'
+  APP_NAME: rentacaresv
+  DEPLOY_PATH: /opt/rentacaresv
+
+jobs:
+  # ============================================
+  # JOB 1: Build y Test
+  # ============================================
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Build con Maven (sin tests)
+        run: mvn clean package -DskipTests -Pproduction
+
+      - name: Subir artefacto JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: target/*.jar
+          retention-days: 1
+
+  # ============================================
+  # JOB 2: Deploy a Servidor
+  # ============================================
+  deploy:
+    name: Deploy to Server
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    environment: rentacares_main
+    
+    steps:
+      - name: Descargar artefacto JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: app-jar
+          path: ./target
+
+      - name: Obtener nombre del JAR
+        id: jar-name
+        run: |
+          JAR_FILE=$(ls target/*.jar | head -1)
+          echo "jar_file=$JAR_FILE" >> $GITHUB_OUTPUT
+          echo "JAR encontrado: $JAR_FILE"
+
+      - name: Copiar JAR al servidor
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ vars.SERVER_HOST }}
+          username: ${{ vars.SERVER_USER }}
+          key: ${{ vars.SERVER_SSH_KEY }}
+          port: ${{ vars.SERVER_PORT || 22 }}
+          source: "target/*.jar"
+          target: "${{ env.DEPLOY_PATH }}/temp"
+          strip_components: 1
+
+      - name: Deploy y reiniciar aplicación
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ vars.SERVER_HOST }}
+          username: ${{ vars.SERVER_USER }}
+          key: ${{ vars.SERVER_SSH_KEY }}
+          port: ${{ vars.SERVER_PORT || 22 }}
+          script: |
+            set -e
+            
+            echo "=========================================="
+            echo "Iniciando deploy de RentaCar ESV"
+            echo "=========================================="
+            
+            # Variables
+            APP_DIR="${{ env.DEPLOY_PATH }}"
+            JAR_NAME="${{ env.APP_NAME }}.jar"
+            SERVICE_NAME="${{ env.APP_NAME }}"
+            
+            # Crear directorio si no existe
+            sudo mkdir -p $APP_DIR
+            sudo mkdir -p $APP_DIR/logs
+            sudo mkdir -p $APP_DIR/backup
+            
+            # Backup del JAR anterior (si existe)
+            if [ -f "$APP_DIR/$JAR_NAME" ]; then
+              echo "Creando backup del JAR anterior..."
+              sudo cp $APP_DIR/$JAR_NAME $APP_DIR/backup/$JAR_NAME.$(date +%Y%m%d_%H%M%S)
+            fi
+            
+            # Mover nuevo JAR
+            echo "Moviendo nuevo JAR..."
+            sudo mv $APP_DIR/temp/*.jar $APP_DIR/$JAR_NAME
+            sudo rm -rf $APP_DIR/temp
+            
+            # Dar permisos
+            sudo chown -R $USER:$USER $APP_DIR
+            sudo chmod +x $APP_DIR/$JAR_NAME
+            
+            # Reiniciar servicio
+            echo "Reiniciando servicio..."
+            if sudo systemctl is-active --quiet $SERVICE_NAME; then
+              sudo systemctl restart $SERVICE_NAME
+            else
+              echo "El servicio no está configurado. Iniciando manualmente..."
+              # Detener proceso anterior si existe
+              pkill -f "$JAR_NAME" || true
+              sleep 2
+              
+              # Iniciar aplicación en background
+              cd $APP_DIR
+              nohup java -jar $JAR_NAME \
+                --spring.profiles.active=prod \
+                > logs/app.log 2>&1 &
+              
+              echo "Aplicación iniciada con PID: $!"
+            fi
+            
+            # Esperar a que la aplicación inicie
+            echo "Esperando a que la aplicación inicie..."
+            sleep 15
+            
+            # Verificar que la aplicación está corriendo
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:8091 | grep -q "200\|302"; then
+              echo "Aplicación desplegada exitosamente!"
+            else
+              echo "La aplicación puede estar iniciando. Verificar logs."
+            fi
+            
+            # Limpiar backups antiguos (mantener últimos 5)
+            cd $APP_DIR/backup
+            ls -t | tail -n +6 | xargs -r rm --
+            
+            echo "=========================================="
+            echo "Deploy completado"
+            echo "=========================================="
+
+  # ============================================
+  # JOB 3: Notificación (opcional)
+  # ============================================
+  notify:
+    name: Notificar resultado
+    needs: [build, deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Notificar éxito
+        if: ${{ needs.deploy.result == 'success' }}
+        run: |
+          echo "Deploy exitoso de RentaCar ESV"
+          echo "Fecha: $(date)"
+          
+      - name: Notificar fallo
+        if: ${{ needs.deploy.result == 'failure' }}
+        run: |
+          echo "Deploy fallido de RentaCar ESV"
+          echo "Revisar logs del workflow"

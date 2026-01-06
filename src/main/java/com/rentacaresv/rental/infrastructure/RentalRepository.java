@@ -2,6 +2,8 @@ package com.rentacaresv.rental.infrastructure;
 
 import com.rentacaresv.rental.domain.Rental;
 import com.rentacaresv.rental.domain.RentalStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -98,4 +100,51 @@ public interface RentalRepository extends JpaRepository<Rental, Long>, JpaSpecif
      */
     @Query("SELECT r FROM Rental r WHERE r.status = 'ACTIVE' AND r.endDate < :currentDate AND r.deletedAt IS NULL")
     List<Rental> findOverdueRentals(@Param("currentDate") LocalDate currentDate);
+
+    // ========================================
+    // Métodos con Paginación (para Lazy Loading)
+    // ========================================
+
+    /**
+     * Encuentra todas las rentas activas con paginación
+     */
+    @Query("SELECT r FROM Rental r WHERE r.deletedAt IS NULL ORDER BY r.createdAt DESC")
+    Page<Rental> findAllActivePaged(Pageable pageable);
+
+    /**
+     * Encuentra rentas por estado con paginación
+     */
+    @Query("SELECT r FROM Rental r WHERE r.status = :status AND r.deletedAt IS NULL ORDER BY r.createdAt DESC")
+    Page<Rental> findByStatusPaged(@Param("status") RentalStatus status, Pageable pageable);
+
+    /**
+     * Busca rentas por término de búsqueda (contrato, cliente, vehículo) con paginación
+     */
+    @Query("SELECT r FROM Rental r " +
+           "WHERE r.deletedAt IS NULL " +
+           "AND (LOWER(r.contractNumber) LIKE LOWER(CONCAT('%', :searchTerm, '%')) " +
+           "OR LOWER(r.customer.fullName) LIKE LOWER(CONCAT('%', :searchTerm, '%')) " +
+           "OR LOWER(r.vehicle.licensePlate) LIKE LOWER(CONCAT('%', :searchTerm, '%'))) " +
+           "ORDER BY r.createdAt DESC")
+    Page<Rental> searchRentals(@Param("searchTerm") String searchTerm, Pageable pageable);
+
+    /**
+     * Busca rentas por estado y término de búsqueda con paginación
+     */
+    @Query("SELECT r FROM Rental r " +
+           "WHERE r.status = :status " +
+           "AND r.deletedAt IS NULL " +
+           "AND (LOWER(r.contractNumber) LIKE LOWER(CONCAT('%', :searchTerm, '%')) " +
+           "OR LOWER(r.customer.fullName) LIKE LOWER(CONCAT('%', :searchTerm, '%')) " +
+           "OR LOWER(r.vehicle.licensePlate) LIKE LOWER(CONCAT('%', :searchTerm, '%'))) " +
+           "ORDER BY r.createdAt DESC")
+    Page<Rental> searchRentalsByStatus(@Param("status") RentalStatus status, 
+                                        @Param("searchTerm") String searchTerm, 
+                                        Pageable pageable);
+
+    /**
+     * Cuenta total de rentas activas (para paginación)
+     */
+    @Query("SELECT COUNT(r) FROM Rental r WHERE r.deletedAt IS NULL")
+    long countAllActive();
 }

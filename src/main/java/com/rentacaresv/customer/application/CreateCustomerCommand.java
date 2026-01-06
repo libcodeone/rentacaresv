@@ -41,6 +41,16 @@ public class CreateCustomerCommand {
     @Past(message = "La fecha de nacimiento debe ser en el pasado")
     private LocalDate birthDate;
 
+    // Licencia de conducir
+    @NotBlank(message = "El número de licencia es obligatorio")
+    @Size(max = 50, message = "El número de licencia no puede tener más de 50 caracteres")
+    private String driverLicenseNumber;
+
+    @Size(max = 3, message = "El código de país debe tener 3 caracteres")
+    private String driverLicenseCountry;
+
+    private LocalDate driverLicenseExpiry;
+
     @NotBlank(message = "La categoría es obligatoria")
     private String category;
 
