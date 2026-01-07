@@ -55,7 +55,7 @@ jobs:
     name: Deploy to Server
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/prod'
     
     environment: rentacares_main
     
