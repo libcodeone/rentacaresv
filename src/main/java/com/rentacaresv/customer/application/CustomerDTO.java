@@ -25,6 +25,12 @@ public class CustomerDTO {
     private String phone;
     private String address;
     private LocalDate birthDate;
+    
+    // Licencia de conducir
+    private String driverLicenseNumber;
+    private String driverLicenseCountry;
+    private LocalDate driverLicenseExpiry;
+    
     private String category;
     private String notes;
     private Boolean active;
@@ -34,4 +40,7 @@ public class CustomerDTO {
     private Integer age;
     private Boolean isVip;
     private Boolean isActiveCustomer;
+    private Boolean hasDriverLicense;
+    private Boolean canRentVehicle;
+    private String cannotRentReason;
 }

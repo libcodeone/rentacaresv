@@ -2,6 +2,7 @@ package com.rentacaresv.vehicle.infrastructure;
 
 import com.rentacaresv.vehicle.application.VehicleDTO;
 import com.rentacaresv.vehicle.domain.Vehicle;
+import com.rentacaresv.vehicle.domain.VehicleType;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -31,6 +32,8 @@ public class VehicleMapper {
                 .color(vehicle.getColor())
                 .transmissionType(vehicle.getTransmissionType().name())
                 .fuelType(vehicle.getFuelType().name())
+                .vehicleType(vehicle.getVehicleType() != null ? vehicle.getVehicleType().name() : null)
+                .vehicleTypeLabel(vehicle.getVehicleType() != null ? vehicle.getVehicleType().getLabel() : null)
                 .passengerCapacity(vehicle.getPassengerCapacity())
                 .mileage(vehicle.getMileage())
                 .priceNormal(vehicle.getPriceNormal())

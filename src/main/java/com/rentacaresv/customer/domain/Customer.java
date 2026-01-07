@@ -50,6 +50,20 @@ public class Customer {
     @Column(name = "birth_date")
     private LocalDate birthDate;
 
+    // ========================================
+    // Licencia de Conducir (REQUERIDO para rentar)
+    // ========================================
+
+    @Column(name = "driver_license_number", length = 50)
+    private String driverLicenseNumber;
+
+    @Column(name = "driver_license_country", length = 3)
+    @Builder.Default
+    private String driverLicenseCountry = "SLV"; // ISO 3166-1 alpha-3 (SLV = El Salvador)
+
+    @Column(name = "driver_license_expiry")
+    private LocalDate driverLicenseExpiry;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "category", nullable = false)
     @Builder.Default
@@ -196,6 +210,36 @@ public class Customer {
      */
     public boolean isActiveCustomer() {
         return active && deletedAt == null;
+    }
+
+    /**
+     * Verifica si el cliente tiene licencia de conducir registrada
+     */
+    public boolean hasDriverLicense() {
+        return driverLicenseNumber != null && !driverLicenseNumber.isBlank();
+    }
+
+    /**
+     * Verifica si el cliente puede rentar un vehículo
+     * Requisitos: Activo y tener licencia registrada
+     */
+    public boolean canRentVehicle() {
+        return active && hasDriverLicense();
+    }
+
+    /**
+     * Obtiene el motivo por el cual no puede rentar (si aplica)
+     */
+    public String getCannotRentReason() {
+        if (!active) {
+            return "Cliente inactivo";
+        }
+        
+        if (!hasDriverLicense()) {
+            return "No tiene licencia de conducir registrada";
+        }
+        
+        return null; // Puede rentar
     }
 
     /**

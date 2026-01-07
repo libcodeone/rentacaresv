@@ -81,8 +81,14 @@ src/main/bundles/
 *.key
 *.pem
 
+# IMPORTANTE: No subir credenciales de producción
+# Si usas valores directos en application.properties, crea application-local.properties
+application-local.properties
+
 # Others
 .mcp.json
 temp/
 tmp/
 CLAUDE.md
+docs/SERVER_SETUP.md
+docs/rentacaresv.service

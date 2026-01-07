@@ -4,6 +4,7 @@ import com.rentacaresv.payment.application.PaymentService;
 import com.rentacaresv.payment.application.RegisterPaymentCommand;
 import com.rentacaresv.payment.domain.PaymentMethod;
 import com.rentacaresv.rental.application.RentalDTO;
+import com.rentacaresv.shared.util.FormatUtils;
 import com.vaadin.flow.component.ComponentEvent;
 import com.vaadin.flow.component.ComponentEventListener;
 import com.vaadin.flow.component.button.Button;
@@ -26,9 +27,6 @@ import com.vaadin.flow.data.binder.ValidationException;
 import com.vaadin.flow.shared.Registration;
 
 import java.math.BigDecimal;
-import java.text.NumberFormat;
-import java.util.Locale;
-
 /**
  * Diálogo para registrar pagos de una renta
  */
@@ -73,7 +71,7 @@ public class RegisterPaymentDialog extends Dialog {
         Span contractInfo = new Span("Contrato: " + rental.getContractNumber());
         contractInfo.getStyle().set("font-weight", "bold");
         
-        Span balanceInfo = new Span("Saldo: " + formatPrice(rental.getBalance()));
+        Span balanceInfo = new Span("Saldo: " + FormatUtils.formatPrice(rental.getBalance()));
         balanceInfo.getStyle()
             .set("font-weight", "bold")
             .set("font-size", "1.2rem")
@@ -195,12 +193,6 @@ public class RegisterPaymentDialog extends Dialog {
         } catch (Exception e) {
             showErrorNotification("Error al registrar pago: " + e.getMessage());
         }
-    }
-
-    private String formatPrice(BigDecimal price) {
-        if (price == null) return "$0.00";
-        NumberFormat formatter = NumberFormat.getCurrencyInstance(new Locale("es", "SV"));
-        return formatter.format(price);
     }
 
     private void showErrorNotification(String message) {
