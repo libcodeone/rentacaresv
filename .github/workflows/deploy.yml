@@ -99,9 +99,9 @@ jobs:
             echo "=========================================="
             
             # Variables
-            APP_DIR="${{ env.DEPLOY_PATH }}"
-            JAR_NAME="${{ env.APP_NAME }}.jar"
-            SERVICE_NAME="${{ env.APP_NAME }}"
+            APP_DIR="/opt/rentacaresv"
+            JAR_NAME="rentacaresv.jar"
+            SERVICE_NAME="rentacaresv"
             
             # Crear directorio si no existe
             sudo mkdir -p $APP_DIR
@@ -125,41 +125,77 @@ jobs:
             
             # Reiniciar servicio
             echo "Reiniciando servicio..."
-            if sudo systemctl is-active --quiet $SERVICE_NAME; then
+            if sudo systemctl is-active --quiet $SERVICE_NAME 2>/dev/null; then
               sudo systemctl restart $SERVICE_NAME
+              echo "Servicio reiniciado via systemctl"
             else
-              echo "El servicio no está configurado. Iniciando manualmente..."
+              echo "Systemd no configurado. Iniciando manualmente..."
+              
               # Detener proceso anterior si existe
-              pkill -f "$JAR_NAME" || true
-              sleep 2
+              PID=$(pgrep -f "$JAR_NAME" || echo "")
+              if [ -n "$PID" ]; then
+                echo "Deteniendo proceso anterior (PID: $PID)..."
+                kill $PID 2>/dev/null || true
+                sleep 5
+                # Forzar si sigue vivo
+                kill -9 $PID 2>/dev/null || true
+                sleep 2
+              fi
               
-              # Iniciar aplicación en background
+              # Cargar variables de entorno si existen
+              if [ -f "$APP_DIR/.env" ]; then
+                echo "Cargando variables de entorno..."
+                export $(grep -v '^#' $APP_DIR/.env | xargs)
+              fi
+              
+              # Iniciar aplicación en background con nohup
               cd $APP_DIR
-              nohup java -jar $JAR_NAME \
-                --spring.profiles.active=prod \
-                > logs/app.log 2>&1 &
+              nohup java -jar $JAR_NAME --spring.profiles.active=prod > logs/app.log 2>&1 &
               
-              echo "Aplicación iniciada con PID: $!"
-            fi
-            
-            # Esperar a que la aplicación inicie
-            echo "Esperando a que la aplicación inicie..."
-            sleep 15
-            
-            # Verificar que la aplicación está corriendo
-            if curl -s -o /dev/null -w "%{http_code}" http://localhost:8091 | grep -q "200\|302"; then
-              echo "Aplicación desplegada exitosamente!"
-            else
-              echo "La aplicación puede estar iniciando. Verificar logs."
+              NEW_PID=$!
+              echo "Aplicación iniciada con PID: $NEW_PID"
+              
+              # Desacoplar del proceso
+              disown $NEW_PID 2>/dev/null || true
             fi
             
             # Limpiar backups antiguos (mantener últimos 5)
-            cd $APP_DIR/backup
-            ls -t | tail -n +6 | xargs -r rm --
+            if [ -d "$APP_DIR/backup" ]; then
+              cd $APP_DIR/backup
+              ls -t 2>/dev/null | tail -n +6 | xargs -r rm -- 2>/dev/null || true
+            fi
             
             echo "=========================================="
             echo "Deploy completado"
             echo "=========================================="
+
+      - name: Verificar aplicación
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ vars.SERVER_HOST }}
+          username: ${{ vars.SERVER_USER }}
+          key: ${{ vars.SERVER_SSH_KEY }}
+          port: ${{ vars.SERVER_PORT || 22 }}
+          script: |
+            echo "Esperando 20 segundos a que la aplicación inicie..."
+            sleep 20
+            
+            # Verificar que el proceso está corriendo
+            if pgrep -f "rentacaresv.jar" > /dev/null; then
+              echo "Proceso Java está corriendo"
+              
+              # Intentar verificar HTTP
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8091 2>/dev/null || echo "000")
+              
+              if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
+                echo "Aplicación respondiendo correctamente (HTTP $HTTP_CODE)"
+              else
+                echo "Aplicación iniciando... (HTTP $HTTP_CODE). Verificar logs en /opt/rentacaresv/logs/app.log"
+              fi
+            else
+              echo "ADVERTENCIA: El proceso no está corriendo. Revisar logs."
+              tail -50 /opt/rentacaresv/logs/app.log 2>/dev/null || echo "No hay logs disponibles"
+            fi
 
   # ============================================
   # JOB 3: Notificación (opcional)
