@@ -1,12 +1,11 @@
 package com.rentacaresv.shared.storage;
 
-import com.rentacaresv.settings.domain.Settings;
-import com.rentacaresv.settings.infrastructure.SettingsRepository;
+import com.rentacaresv.settings.application.SettingsCache;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -17,20 +16,20 @@ import software.amazon.awssdk.services.s3.model.*;
 
 import java.io.InputStream;
 import java.net.URI;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 /**
- * Servicio para gestión de archivos en Digital Ocean Spaces
+ * Servicio para gestión de archivos en Digital Ocean Spaces.
+ * Utiliza SettingsCache para obtener el tenant_id de forma eficiente.
  */
 @Service
 @Slf4j
 public class FileStorageService {
 
     private S3Client s3Client;
-    private final SettingsRepository settingsRepository;
+    private final SettingsCache settingsCache;
     private final String bucketName;
     private final String baseUrl;
     private final String basePath = "rentacaresv";
@@ -47,7 +46,7 @@ public class FileStorageService {
             @Value("${do.spaces.bucket}") String bucketName,
             @Value("${do.spaces.region}") String region,
             @Value("${do.spaces.endpoint}") String endpoint,
-            SettingsRepository settingsRepository) {
+            @Lazy SettingsCache settingsCache) {
 
         this.accessKey = accessKey;
         this.secretKey = secretKey;
@@ -55,7 +54,7 @@ public class FileStorageService {
         this.region = region;
         this.endpoint = endpoint;
         this.baseUrl = endpoint;
-        this.settingsRepository = settingsRepository;
+        this.settingsCache = settingsCache;
 
         log.info("FileStorageService constructor called with endpoint: {}", endpoint);
     }
@@ -93,38 +92,6 @@ public class FileStorageService {
     }
 
     /**
-     * Obtiene o crea la configuración global
-     */
-    public Settings getOrCreateSettings() {
-        List<Settings> all = settingsRepository.findAll();
-        Settings settings;
-
-        if (all.isEmpty()) {
-            log.info("ℹ️ No se encontró configuración. Creando configuración inicial...");
-            settings = new Settings();
-            settings.setTenantId(UUID.randomUUID().toString());
-            settings.setCompanyName("RentaCarESV");
-            settings.setFoldersInitialized(false);
-            settings.setCreatedAt(LocalDateTime.now());
-            settings = settingsRepository.save(settings);
-            log.info("✅ Configuración inicial creada con tenant_id: {}", settings.getTenantId());
-        } else {
-            settings = all.get(0);
-        }
-
-        // SELF-HEALING: If tenant_id is broken (empty/null), fix it immediately
-        if (settings.getTenantId() == null || settings.getTenantId().trim().isEmpty()) {
-            log.warn("⚠️ FOUND EMPTY TENANT_ID. REPAIRING RECORD...");
-            settings.setTenantId(UUID.randomUUID().toString());
-            settings = settingsRepository.save(settings);
-            log.info("✅ TENANT_ID REPAIRED: {}", settings.getTenantId());
-        }
-
-        log.debug("🔍 LOADED SETTINGS: {}", settings.toString());
-        return settings;
-    }
-
-    /**
      * Sube un archivo a Digital Ocean Spaces
      */
     public String uploadFile(InputStream inputStream, String fileName, String contentType,
@@ -134,12 +101,11 @@ public class FileStorageService {
             throw new IllegalStateException("FileStorageService no está inicializado");
         }
 
-        Settings settings = getOrCreateSettings();
-        String tenantId = settings.getTenantId();
+        String tenantId = settingsCache.getTenantId();
 
         // Validación crítica
         if (tenantId == null || tenantId.trim().isEmpty()) {
-            log.error("❌ ERROR: tenant_id es NULL o vacío en Settings ID: {}", settings.getId());
+            log.error("❌ ERROR: tenant_id es NULL o vacío");
             throw new IllegalStateException("tenant_id no puede ser NULL o vacío");
         }
 
@@ -206,8 +172,8 @@ public class FileStorageService {
             return new ArrayList<>();
         }
 
-        Settings settings = getOrCreateSettings();
-        String prefix = buildPrefix(settings.getTenantId(), folderType, subFolder);
+        String tenantId = settingsCache.getTenantId();
+        String prefix = buildPrefix(tenantId, folderType, subFolder);
         List<String> fileUrls = new ArrayList<>();
 
         try {
@@ -231,12 +197,10 @@ public class FileStorageService {
     }
 
     /**
-     * Obtiene el tenant ID actual
+     * Obtiene el tenant ID actual desde cache
      */
     public String getCurrentTenantId() {
-        return settingsRepository.findGlobalSettings()
-                .map(Settings::getTenantId)
-                .orElse(null);
+        return settingsCache.getTenantId();
     }
 
     public boolean isInitialized() {
@@ -272,13 +236,10 @@ public class FileStorageService {
     }
 
     private String extractKeyFromUrl(String fileUrl) {
-        // Extraer key de la URL
-        // Formato: https://sfo3.digitaloceanspaces.com/tecnoipobjects/rentacaresv/...
         String[] parts = fileUrl.split(bucketName + "/");
         if (parts.length > 1) {
             return parts[1];
         }
-        // Fallback: quitar el baseUrl
         return fileUrl.replace(baseUrl + "/", "").replace(bucketName + "/", "");
     }
 

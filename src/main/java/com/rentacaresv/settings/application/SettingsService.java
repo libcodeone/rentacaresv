@@ -1,7 +1,6 @@
 package com.rentacaresv.settings.application;
 
 import com.rentacaresv.settings.domain.Settings;
-import com.rentacaresv.settings.infrastructure.SettingsRepository;
 import com.rentacaresv.shared.storage.FileStorageService;
 import com.rentacaresv.shared.storage.FolderType;
 import lombok.RequiredArgsConstructor;
@@ -12,31 +11,43 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.InputStream;
 
 /**
- * Servicio de aplicación para gestión de Settings
+ * Servicio de aplicación para gestión de Settings.
+ * Utiliza SettingsCache para evitar consultas repetidas a la BD.
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class SettingsService {
 
-    private final SettingsRepository settingsRepository;
+    private final SettingsCache settingsCache;
     private final FileStorageService fileStorageService;
 
     /**
-     * Obtiene la configuración global
+     * Obtiene la configuración global desde cache
      */
     public Settings getSettings() {
-        return settingsRepository.findGlobalSettings()
-                .orElseThrow(() -> new IllegalStateException("No se encontró configuración global"));
+        return settingsCache.getSettings();
     }
 
     /**
-     * Obtiene la URL del logo actual
+     * Obtiene la URL del logo actual desde cache
      */
     public String getLogoUrl() {
-        return settingsRepository.findGlobalSettings()
-                .map(Settings::getLogoUrl)
-                .orElse(null);
+        return settingsCache.getLogoUrl();
+    }
+
+    /**
+     * Obtiene el nombre de la empresa desde cache
+     */
+    public String getCompanyName() {
+        return settingsCache.getCompanyName();
+    }
+
+    /**
+     * Obtiene el tenant ID desde cache
+     */
+    public String getTenantId() {
+        return settingsCache.getTenantId();
     }
 
     /**
@@ -46,11 +57,11 @@ public class SettingsService {
     public String uploadLogo(InputStream inputStream, String fileName, String contentType) {
         log.info("Subiendo nuevo logo: {}", fileName);
 
-        Settings settings = getSettings();
+        Settings settings = settingsCache.getSettings();
 
         // Eliminar logo anterior si existe
         String currentLogoUrl = settings.getLogoUrl();
-        if (currentLogoUrl != null && !currentLogoUrl.isEmpty() && !currentLogoUrl.contains("images/logo.png")) {
+        if (currentLogoUrl != null && !currentLogoUrl.isEmpty()) {
             try {
                 fileStorageService.deleteFile(currentLogoUrl);
                 log.info("Logo anterior eliminado: {}", currentLogoUrl);
@@ -68,9 +79,9 @@ public class SettingsService {
                 "logo"
         );
 
-        // Actualizar en base de datos
+        // Actualizar en BD y cache
         settings.updateLogoUrl(newLogoUrl);
-        settingsRepository.save(settings);
+        settingsCache.updateSettings(settings);
 
         log.info("Nuevo logo guardado: {}", newLogoUrl);
         return newLogoUrl;
@@ -83,11 +94,11 @@ public class SettingsService {
     public void resetLogo() {
         log.info("Reseteando logo al valor por defecto");
 
-        Settings settings = getSettings();
+        Settings settings = settingsCache.getSettings();
 
         // Eliminar logo actual si existe en DO Spaces
         String currentLogoUrl = settings.getLogoUrl();
-        if (currentLogoUrl != null && !currentLogoUrl.isEmpty() && !currentLogoUrl.contains("images/logo.png")) {
+        if (currentLogoUrl != null && !currentLogoUrl.isEmpty()) {
             try {
                 fileStorageService.deleteFile(currentLogoUrl);
                 log.info("Logo eliminado de DO Spaces: {}", currentLogoUrl);
@@ -96,9 +107,9 @@ public class SettingsService {
             }
         }
 
-        // Resetear a null (usará el logo por defecto)
+        // Resetear a null y actualizar cache
         settings.updateLogoUrl(null);
-        settingsRepository.save(settings);
+        settingsCache.updateSettings(settings);
 
         log.info("Logo reseteado al valor por defecto");
     }
@@ -108,18 +119,16 @@ public class SettingsService {
      */
     @Transactional
     public void updateCompanyName(String companyName) {
-        Settings settings = getSettings();
+        Settings settings = settingsCache.getSettings();
         settings.setCompanyName(companyName);
-        settingsRepository.save(settings);
+        settingsCache.updateSettings(settings);
         log.info("Nombre de empresa actualizado: {}", companyName);
     }
 
     /**
-     * Obtiene el nombre de la empresa
+     * Fuerza recarga del cache desde BD
      */
-    public String getCompanyName() {
-        return settingsRepository.findGlobalSettings()
-                .map(Settings::getCompanyName)
-                .orElse("RentaCarESV");
+    public void refreshCache() {
+        settingsCache.refresh();
     }
 }
