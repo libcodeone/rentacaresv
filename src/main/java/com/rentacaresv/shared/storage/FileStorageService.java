@@ -95,13 +95,19 @@ public class FileStorageService {
     /**
      * Obtiene o crea la configuración global
      */
-
     public Settings getOrCreateSettings() {
         List<Settings> all = settingsRepository.findAll();
         Settings settings;
 
         if (all.isEmpty()) {
-            throw new IllegalStateException("❌ NO CONFIGURATION FOUND IN DATABASE");
+            log.info("ℹ️ No se encontró configuración. Creando configuración inicial...");
+            settings = new Settings();
+            settings.setTenantId(UUID.randomUUID().toString());
+            settings.setCompanyName("RentaCarESV");
+            settings.setFoldersInitialized(false);
+            settings.setCreatedAt(LocalDateTime.now());
+            settings = settingsRepository.save(settings);
+            log.info("✅ Configuración inicial creada con tenant_id: {}", settings.getTenantId());
         } else {
             settings = all.get(0);
         }
@@ -114,7 +120,7 @@ public class FileStorageService {
             log.info("✅ TENANT_ID REPAIRED: {}", settings.getTenantId());
         }
 
-        log.info("🔍 LOADED SETTINGS: {}", settings.toString());
+        log.debug("🔍 LOADED SETTINGS: {}", settings.toString());
         return settings;
     }
 
