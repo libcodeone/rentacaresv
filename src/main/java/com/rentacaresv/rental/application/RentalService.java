@@ -38,7 +38,7 @@ public class RentalService {
     private final VehicleRepository vehicleRepository;
     private final CustomerRepository customerRepository;
     private final RentalMapper rentalMapper;
-    
+
     // Domain Service (Java puro, sin @Service)
     private final RentalPriceCalculator priceCalculator = new RentalPriceCalculator();
 
@@ -46,8 +46,8 @@ public class RentalService {
      * Crea una nueva renta
      */
     public RentalDTO createRental(@Valid CreateRentalCommand command) {
-        log.info("Creando renta para vehículo {} y cliente {}", 
-            command.getVehicleId(), command.getCustomerId());
+        log.info("Creando renta para vehículo {} y cliente {}",
+                command.getVehicleId(), command.getCustomerId());
 
         // Validación adicional
         command.validate();
@@ -55,34 +55,29 @@ public class RentalService {
         // 1. Obtener entidades
         Vehicle vehicle = vehicleRepository.findById(command.getVehicleId())
                 .orElseThrow(() -> new IllegalArgumentException(
-                    "Vehículo no encontrado con ID: " + command.getVehicleId()
-                ));
+                        "Vehículo no encontrado con ID: " + command.getVehicleId()));
 
         Customer customer = customerRepository.findById(command.getCustomerId())
                 .orElseThrow(() -> new IllegalArgumentException(
-                    "Cliente no encontrado con ID: " + command.getCustomerId()
-                ));
+                        "Cliente no encontrado con ID: " + command.getCustomerId()));
 
         // 2. Validar disponibilidad del vehículo
         if (!vehicle.isAvailable()) {
             throw new IllegalStateException(
-                "El vehículo " + vehicle.getLicensePlate() + " no está disponible"
-            );
+                    "El vehículo " + vehicle.getLicensePlate() + " no está disponible");
         }
 
         // 3. Validar que el cliente esté activo
         if (!customer.isActiveCustomer()) {
             throw new IllegalStateException(
-                "El cliente " + customer.getFullName() + " no está activo"
-            );
+                    "El cliente " + customer.getFullName() + " no está activo");
         }
 
         // 4. Calcular precio usando Domain Service
         int days = priceCalculator.calculateDays(command.getStartDate(), command.getEndDate());
         BigDecimal dailyRate = priceCalculator.selectDailyRate(vehicle, customer, days);
         BigDecimal totalAmount = priceCalculator.calculateTotalPrice(
-            vehicle, customer, command.getStartDate(), command.getEndDate()
-        );
+                vehicle, customer, command.getStartDate(), command.getEndDate());
 
         // 5. Generar número de contrato
         String contractNumber = generateContractNumber();
@@ -104,10 +99,10 @@ public class RentalService {
 
         // 7. Persistir
         rental = rentalRepository.save(rental);
-        
-        log.info("Renta creada exitosamente: {} - {} días - ${}", 
-            contractNumber, days, totalAmount);
-        
+
+        log.info("Renta creada exitosamente: {} - {} días - ${}",
+                contractNumber, days, totalAmount);
+
         return rentalMapper.toDTO(rental);
     }
 
@@ -116,23 +111,23 @@ public class RentalService {
      */
     public void deliverRental(Long rentalId, String notes) {
         log.info("Entregando vehículo de la renta {}", rentalId);
-        
+
         Rental rental = rentalRepository.findById(rentalId)
                 .orElseThrow(() -> new IllegalArgumentException("Renta no encontrada"));
-        
+
         rental.deliverVehicle(); // Lógica de dominio
-        
+
         // Agregar notas de entrega si existen
         if (notes != null && !notes.isBlank()) {
             String currentNotes = rental.getNotes() != null ? rental.getNotes() : "";
             rental.setNotes(currentNotes + "\n\n=== ENTREGA ===\n" + notes);
         }
-        
+
         rentalRepository.save(rental);
-        
-        log.info("Vehículo {} entregado a {}", 
-            rental.getVehicle().getLicensePlate(), 
-            rental.getCustomer().getFullName());
+
+        log.info("Vehículo {} entregado a {}",
+                rental.getVehicle().getLicensePlate(),
+                rental.getCustomer().getFullName());
     }
 
     /**
@@ -147,18 +142,18 @@ public class RentalService {
      */
     public void returnRental(Long rentalId, String notes, boolean needsMaintenance) {
         log.info("Devolviendo vehículo de la renta {}", rentalId);
-        
+
         Rental rental = rentalRepository.findById(rentalId)
                 .orElseThrow(() -> new IllegalArgumentException("Renta no encontrada"));
-        
+
         rental.returnVehicle(); // Lógica de dominio
-        
+
         // Agregar notas de devolución si existen
         if (notes != null && !notes.isBlank()) {
             String currentNotes = rental.getNotes() != null ? rental.getNotes() : "";
             rental.setNotes(currentNotes + "\n\n=== DEVOLUCIÓN ===\n" + notes);
         }
-        
+
         // Si requiere mantenimiento, cambiar estado del vehículo
         if (needsMaintenance) {
             Vehicle vehicle = rental.getVehicle();
@@ -166,18 +161,18 @@ public class RentalService {
             vehicleRepository.save(vehicle);
             log.warn("Vehículo {} enviado a mantenimiento", vehicle.getLicensePlate());
         }
-        
+
         rentalRepository.save(rental);
-        
-        log.info("Vehículo {} devuelto. Renta completada.", 
-            rental.getVehicle().getLicensePlate());
-        
+
+        log.info("Vehículo {} devuelto. Renta completada.",
+                rental.getVehicle().getLicensePlate());
+
         // Verificar si hay retraso
         if (rental.isDelayed()) {
-            log.warn("Renta {} devuelta con {} días de retraso. Penalidad: ${}", 
-                rental.getContractNumber(),
-                rental.getDelayDays(),
-                rental.calculateDelayPenalty());
+            log.warn("Renta {} devuelta con {} días de retraso. Penalidad: ${}",
+                    rental.getContractNumber(),
+                    rental.getDelayDays(),
+                    rental.calculateDelayPenalty());
         }
     }
 
@@ -193,10 +188,10 @@ public class RentalService {
      */
     public void cancelRental(Long rentalId) {
         log.info("Cancelando renta {}", rentalId);
-        
+
         Rental rental = rentalRepository.findById(rentalId)
                 .orElseThrow(() -> new IllegalArgumentException("Renta no encontrada"));
-        
+
         rental.cancel(); // Lógica de dominio
         rentalRepository.save(rental);
     }
@@ -205,15 +200,15 @@ public class RentalService {
      * Registra un pago
      */
     public void registerPayment(@Valid RegisterPaymentCommand command) {
-        log.info("Registrando pago de ${} para renta {}", 
-            command.getAmount(), command.getRentalId());
-        
+        log.info("Registrando pago de ${} para renta {}",
+                command.getAmount(), command.getRentalId());
+
         Rental rental = rentalRepository.findById(command.getRentalId())
                 .orElseThrow(() -> new IllegalArgumentException("Renta no encontrada"));
-        
+
         rental.registerPayment(command.getAmount()); // Lógica de dominio
         rentalRepository.save(rental);
-        
+
         log.info("Pago registrado. Nuevo saldo: ${}", rental.getBalance());
     }
 
@@ -235,11 +230,11 @@ public class RentalService {
     public Rental findRentalEntityById(Long id) {
         Rental rental = rentalRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Renta no encontrada con ID: " + id));
-        
+
         // Forzar carga de relaciones lazy (para uso fuera de transacción)
         rental.getCustomer().getFullName(); // Inicializa Customer
         rental.getVehicle().getBrand(); // Inicializa Vehicle
-        
+
         return rental;
     }
 
@@ -336,10 +331,10 @@ public class RentalService {
      */
     public void deleteRental(Long rentalId) {
         log.info("Eliminando renta {}", rentalId);
-        
+
         Rental rental = rentalRepository.findById(rentalId)
                 .orElseThrow(() -> new IllegalArgumentException("Renta no encontrada"));
-        
+
         rental.delete(); // Lógica de dominio
         rentalRepository.save(rental);
     }
@@ -351,16 +346,16 @@ public class RentalService {
     private String generateContractNumber() {
         String date = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         String prefix = "RENT-" + date + "-";
-        
+
         // Buscar el último número del día
         int sequence = 1;
         String contractNumber;
-        
+
         do {
             contractNumber = prefix + String.format("%05d", sequence);
             sequence++;
         } while (rentalRepository.existsByContractNumber(contractNumber));
-        
+
         return contractNumber;
     }
 
@@ -416,5 +411,54 @@ public class RentalService {
     @Transactional(readOnly = true)
     public long countAllActive() {
         return rentalRepository.countAllActive();
+    }
+
+    /**
+     * Obtiene todas las rentas como eventos de calendario
+     * Mapea las rentas a eventos con colores según su estado
+     */
+    @Transactional(readOnly = true)
+    public List<com.rentacaresv.calendar.application.CalendarEventDTO> findAllAsCalendarEvents() {
+        List<Rental> rentals = rentalRepository.findAllActive();
+
+        return rentals.stream()
+                .map(this::mapToCalendarEvent)
+                .toList();
+    }
+
+    /**
+     * Mapea una renta a un evento de calendario
+     */
+    private com.rentacaresv.calendar.application.CalendarEventDTO mapToCalendarEvent(Rental rental) {
+        // Determinar color según estado
+        String color = switch (rental.getStatus()) {
+            case PENDING -> "#FFC107"; // Amarillo
+            case ACTIVE -> "#4CAF50"; // Verde
+            case COMPLETED -> "#2196F3"; // Azul
+            case CANCELLED -> "#F44336"; // Rojo
+        };
+
+        // Construir título del evento
+        String title = String.format("%s - %s %s",
+                rental.getCustomer().getFullName(),
+                rental.getVehicle().getBrand(),
+                rental.getVehicle().getModel());
+
+        // Información del vehículo
+        String vehicleInfo = String.format("%s %s (%s)",
+                rental.getVehicle().getBrand(),
+                rental.getVehicle().getModel(),
+                rental.getVehicle().getLicensePlate());
+
+        return new com.rentacaresv.calendar.application.CalendarEventDTO(
+                rental.getId(),
+                title,
+                rental.getStartDate(),
+                rental.getEndDate(),
+                color,
+                rental.getStatus().name(),
+                rental.getCustomer().getFullName(),
+                vehicleInfo,
+                rental.getContractNumber());
     }
 }
