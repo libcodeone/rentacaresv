@@ -7,7 +7,8 @@ public enum FolderType {
     PROFILE_PHOTOS("profile_photos"),
     CARS("cars"),
     CAR_DETAILS("car_details"),
-    LOGOS("logos");
+    LOGOS("logos"),
+    SETTINGS("settings");
 
     private final String folderName;
 
