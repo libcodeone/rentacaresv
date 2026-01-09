@@ -1,6 +1,7 @@
 package com.rentacaresv.views;
 
 import com.rentacaresv.security.AuthenticatedUser;
+import com.rentacaresv.settings.application.SettingsService;
 import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.component.applayout.DrawerToggle;
 import com.vaadin.flow.component.avatar.Avatar;
@@ -23,6 +24,7 @@ import com.vaadin.flow.server.menu.MenuConfiguration;
 import com.vaadin.flow.server.menu.MenuEntry;
 import com.vaadin.flow.theme.lumo.LumoUtility;
 import jakarta.annotation.security.PermitAll;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.Optional;
@@ -31,13 +33,16 @@ import java.util.Optional;
  * Layout principal de la aplicación
  */
 @PermitAll
+@Slf4j
 public class MainLayout extends AppLayout implements AfterNavigationObserver {
 
     private H1 viewTitle;
-    private AuthenticatedUser authenticatedUser;
+    private final AuthenticatedUser authenticatedUser;
+    private final SettingsService settingsService;
 
-    public MainLayout(AuthenticatedUser authenticatedUser) {
+    public MainLayout(AuthenticatedUser authenticatedUser, SettingsService settingsService) {
         this.authenticatedUser = authenticatedUser;
+        this.settingsService = settingsService;
         setPrimarySection(Section.DRAWER);
         addDrawerContent();
         addHeaderContent();
@@ -63,16 +68,18 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
             .set("padding", "var(--lumo-space-m)")
             .set("background", "var(--lumo-contrast-5pct)")
             .set("border-bottom", "1px solid var(--lumo-contrast-10pct)")
-            .set("height", "64px")  // Altura fija igual al navbar
+            .set("height", "64px")
             .set("overflow", "hidden");
 
-        // Logo con proporciones ajustadas
-        Image logo = new Image("images/logo.png", "RentaCareSV Logo");
+        // Obtener logo dinámicamente
+        String logoUrl = getLogoUrl();
+        
+        Image logo = new Image(logoUrl, "Logo");
         logo.getStyle()
-            .set("height", "56px")  // Altura específica
-            .set("width", "auto")   // Ancho automático para mantener proporción
-            .set("object-fit", "contain")  // Mantener proporción
-            .set("object-position", "center");  // Centrar la imagen
+            .set("height", "56px")
+            .set("width", "auto")
+            .set("object-fit", "contain")
+            .set("object-position", "center");
         
         logoContainer.add(logo);
 
@@ -81,6 +88,22 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         Scroller scroller = new Scroller(createNavigation());
 
         addToDrawer(header, scroller, createFooter());
+    }
+
+    /**
+     * Obtiene la URL del logo desde Settings o usa el logo por defecto
+     */
+    private String getLogoUrl() {
+        try {
+            String customLogoUrl = settingsService.getLogoUrl();
+            if (customLogoUrl != null && !customLogoUrl.isEmpty()) {
+                log.debug("Usando logo personalizado: {}", customLogoUrl);
+                return customLogoUrl;
+            }
+        } catch (Exception e) {
+            log.warn("Error obteniendo logo personalizado: {}", e.getMessage());
+        }
+        return "images/logo.png";
     }
 
     private SideNav createNavigation() {
