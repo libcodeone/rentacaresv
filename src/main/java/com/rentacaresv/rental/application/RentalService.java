@@ -1,5 +1,6 @@
 package com.rentacaresv.rental.application;
 
+import com.rentacaresv.calendar.application.GoogleCalendarService;
 import com.rentacaresv.customer.domain.Customer;
 import com.rentacaresv.customer.infrastructure.CustomerRepository;
 import com.rentacaresv.rental.domain.Rental;
@@ -7,6 +8,7 @@ import com.rentacaresv.rental.domain.RentalPriceCalculator;
 import com.rentacaresv.rental.domain.RentalStatus;
 import com.rentacaresv.rental.infrastructure.RentalMapper;
 import com.rentacaresv.rental.infrastructure.RentalRepository;
+import com.rentacaresv.security.AuthenticatedUser;
 import com.rentacaresv.vehicle.domain.Vehicle;
 import com.rentacaresv.vehicle.infrastructure.VehicleRepository;
 import jakarta.validation.Valid;
@@ -38,6 +40,8 @@ public class RentalService {
     private final VehicleRepository vehicleRepository;
     private final CustomerRepository customerRepository;
     private final RentalMapper rentalMapper;
+    private final GoogleCalendarService googleCalendarService;
+    private final AuthenticatedUser authenticatedUser;
 
     // Domain Service (Java puro, sin @Service)
     private final RentalPriceCalculator priceCalculator = new RentalPriceCalculator();
@@ -103,6 +107,9 @@ public class RentalService {
         log.info("Renta creada exitosamente: {} - {} días - ${}",
                 contractNumber, days, totalAmount);
 
+        // 8. Sincronizar con Google Calendar (opcional)
+        syncRentalToGoogleCalendar(rental);
+
         return rentalMapper.toDTO(rental);
     }
 
@@ -124,6 +131,9 @@ public class RentalService {
         }
 
         rentalRepository.save(rental);
+
+        // Actualizar evento en Google Calendar
+        updateRentalInGoogleCalendar(rental);
 
         log.info("Vehículo {} entregado a {}",
                 rental.getVehicle().getLicensePlate(),
@@ -164,6 +174,9 @@ public class RentalService {
 
         rentalRepository.save(rental);
 
+        // Actualizar evento en Google Calendar
+        updateRentalInGoogleCalendar(rental);
+
         log.info("Vehículo {} devuelto. Renta completada.",
                 rental.getVehicle().getLicensePlate());
 
@@ -194,6 +207,9 @@ public class RentalService {
 
         rental.cancel(); // Lógica de dominio
         rentalRepository.save(rental);
+
+        // Eliminar evento de Google Calendar (renta cancelada)
+        deleteRentalFromGoogleCalendar(rental);
     }
 
     /**
@@ -327,6 +343,24 @@ public class RentalService {
     }
 
     /**
+     * Cuenta rentas que terminan en una fecha específica
+     */
+    @Transactional(readOnly = true)
+    public long countEndingOn(LocalDate date) {
+        return rentalRepository.countByEndDate(date);
+    }
+
+    /**
+     * Cuenta rentas completadas este mes
+     */
+    @Transactional(readOnly = true)
+    public long countCompletedThisMonth() {
+        LocalDate startOfMonth = LocalDate.now().withDayOfMonth(1);
+        LocalDate endOfMonth = startOfMonth.plusMonths(1).minusDays(1);
+        return rentalRepository.countCompletedBetweenDates(startOfMonth, endOfMonth);
+    }
+
+    /**
      * Elimina una renta (soft delete)
      */
     public void deleteRental(Long rentalId) {
@@ -334,6 +368,9 @@ public class RentalService {
 
         Rental rental = rentalRepository.findById(rentalId)
                 .orElseThrow(() -> new IllegalArgumentException("Renta no encontrada"));
+
+        // Eliminar evento de Google Calendar antes del soft delete
+        deleteRentalFromGoogleCalendar(rental);
 
         rental.delete(); // Lógica de dominio
         rentalRepository.save(rental);
@@ -460,5 +497,84 @@ public class RentalService {
                 rental.getCustomer().getFullName(),
                 vehicleInfo,
                 rental.getContractNumber());
+    }
+
+    // ========================================
+    // Sincronización con Google Calendar
+    // ========================================
+
+    /**
+     * Sincroniza una renta con Google Calendar (creación)
+     */
+    private void syncRentalToGoogleCalendar(Rental rental) {
+        try {
+            authenticatedUser.get().ifPresent(user -> {
+                try {
+                    String eventId = googleCalendarService.createRentalEvent(rental, user);
+                    if (eventId != null) {
+                        rental.setGoogleCalendarEventId(eventId);
+                        rentalRepository.save(rental);
+                        log.info("✅ Renta {} sincronizada con Google Calendar: {}",
+                                rental.getContractNumber(), eventId);
+                    }
+                } catch (Exception e) {
+                    log.warn("⚠️ No se pudo sincronizar renta {} con Google Calendar: {}",
+                            rental.getContractNumber(), e.getMessage());
+                }
+            });
+        } catch (Exception e) {
+            log.warn("⚠️ Error al sincronizar con Google Calendar: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Actualiza un evento existente en Google Calendar
+     */
+    private void updateRentalInGoogleCalendar(Rental rental) {
+        if (rental.getGoogleCalendarEventId() == null) {
+            return; // No hay evento que actualizar
+        }
+
+        try {
+            authenticatedUser.get().ifPresent(user -> {
+                try {
+                    googleCalendarService.updateRentalEvent(
+                            rental.getGoogleCalendarEventId(), rental, user);
+                    log.info("✅ Evento de Google Calendar actualizado: {}",
+                            rental.getGoogleCalendarEventId());
+                } catch (Exception e) {
+                    log.warn("⚠️ No se pudo actualizar evento {} en Google Calendar: {}",
+                            rental.getGoogleCalendarEventId(), e.getMessage());
+                }
+            });
+        } catch (Exception e) {
+            log.warn("⚠️ Error al actualizar Google Calendar: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Elimina un evento de Google Calendar
+     */
+    private void deleteRentalFromGoogleCalendar(Rental rental) {
+        if (rental.getGoogleCalendarEventId() == null) {
+            return; // No hay evento que eliminar
+        }
+
+        try {
+            authenticatedUser.get().ifPresent(user -> {
+                try {
+                    googleCalendarService.deleteRentalEvent(
+                            rental.getGoogleCalendarEventId(), user);
+                    log.info("✅ Evento de Google Calendar eliminado: {}",
+                            rental.getGoogleCalendarEventId());
+                    rental.setGoogleCalendarEventId(null);
+                } catch (Exception e) {
+                    log.warn("⚠️ No se pudo eliminar evento {} de Google Calendar: {}",
+                            rental.getGoogleCalendarEventId(), e.getMessage());
+                }
+            });
+        } catch (Exception e) {
+            log.warn("⚠️ Error al eliminar de Google Calendar: {}", e.getMessage());
+        }
     }
 }

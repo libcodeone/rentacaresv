@@ -1,16 +1,12 @@
 package com.rentacaresv.views.home;
 
-import com.rentacaresv.calendar.application.CalendarEventDTO;
-import com.rentacaresv.components.calendar.CustomCalendar;
-import com.rentacaresv.rental.application.RentalDTO;
 import com.rentacaresv.rental.application.RentalService;
-import com.rentacaresv.rental.ui.RentalDetailsDialog;
+import com.rentacaresv.rental.domain.RentalStatus;
 import com.rentacaresv.security.AuthenticatedUser;
 import com.rentacaresv.views.MainLayout;
-import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
@@ -19,17 +15,16 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.Menu;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.router.RouterLink;
 import jakarta.annotation.security.PermitAll;
 import lombok.extern.slf4j.Slf4j;
 import org.vaadin.lineawesome.LineAwesomeIconUrl;
 
-import java.util.List;
-import java.util.stream.Collectors;
+import java.time.LocalDate;
 
 /**
  * Vista principal de inicio del sistema RentaCar ESV
- * Primera pantalla que ve el usuario después de hacer login
- * Ahora incluye calendario personalizado de rentas
+ * Muestra un dashboard con estadísticas y accesos rápidos
  */
 @PageTitle("Inicio")
 @Route(value = "", layout = MainLayout.class)
@@ -39,7 +34,6 @@ import java.util.stream.Collectors;
 public class HomeView extends VerticalLayout {
 
     private final RentalService rentalService;
-    private CustomCalendar calendar;
 
     public HomeView(AuthenticatedUser authenticatedUser, RentalService rentalService) {
         this.rentalService = rentalService;
@@ -56,128 +50,154 @@ public class HomeView extends VerticalLayout {
             log.info("Usuario {} ({}) accedió al sistema", user.getUsername(), user.getName())
         );
 
-        // Sección de calendario
-        VerticalLayout calendarSection = createCalendarSection();
-
-        // Agregar el calendario
-        add(calendarSection);
-        
-        // El calendario debe expandirse para ocupar el espacio disponible
-        setFlexGrow(1, calendarSection);
-    }
-
-    private VerticalLayout createCalendarSection() {
-        // Crear calendario personalizado
-        calendar = new CustomCalendar();
-        calendar.setSizeFull();
-
-        // Cargar eventos
-        loadCalendarEvents();
-
-        // Evento al hacer click en un evento del calendario
-        calendar.addEventClickListener(event -> {
-            Object data = event.getData();
-            if (data instanceof Long) {
-                Long rentalId = (Long) data;
-                openRentalDetails(rentalId);
-            }
+        // Saludo
+        authenticatedUser.get().ifPresent(user -> {
+            H2 greeting = new H2("¡Bienvenido, " + user.getName() + "!");
+            greeting.getStyle().set("margin-top", "0");
+            add(greeting);
         });
 
-        // Botón para refrescar
-        Button refreshButton = new Button("Actualizar", VaadinIcon.REFRESH.create());
-        refreshButton.addThemeVariants(ButtonVariant.LUMO_SMALL);
-        refreshButton.addClickListener(e -> loadCalendarEvents());
+        // Dashboard de estadísticas
+        HorizontalLayout statsRow = createStatsRow();
+        add(statsRow);
 
-        // Leyenda de colores
-        HorizontalLayout legend = createLegend();
+        // Accesos rápidos
+        H3 quickAccessTitle = new H3("Accesos Rápidos");
+        quickAccessTitle.getStyle().set("margin-bottom", "0");
+        add(quickAccessTitle);
 
-        // Header del contenedor del calendario
-        HorizontalLayout calendarHeader = new HorizontalLayout();
-        calendarHeader.setWidthFull();
-        calendarHeader.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
-        calendarHeader.setAlignItems(FlexComponent.Alignment.CENTER);
-
-        H2 calendarTitle = new H2("Calendario de Rentas");
-        calendarTitle.getStyle().set("margin", "0");
-
-        calendarHeader.add(calendarTitle, refreshButton);
-
-        // Contenedor del calendario
-        VerticalLayout calendarContainer = new VerticalLayout();
-        calendarContainer.setSizeFull();
-        calendarContainer.setPadding(false);
-        calendarContainer.setSpacing(true);
-        calendarContainer.getStyle().set("padding-bottom", "var(--lumo-space-l)");
-        calendarContainer.add(calendarHeader, legend, calendar);
-        
-        // El calendario interno debe expandirse
-        calendarContainer.setFlexGrow(1, calendar);
-
-        return calendarContainer;
+        HorizontalLayout quickAccess = createQuickAccessRow();
+        add(quickAccess);
     }
 
-    private void loadCalendarEvents() {
-        // Obtener rentas como eventos DTO desde el servicio
-        List<CalendarEventDTO> eventDTOs = rentalService.findAllAsCalendarEvents();
+    private HorizontalLayout createStatsRow() {
+        HorizontalLayout row = new HorizontalLayout();
+        row.setWidthFull();
+        row.setSpacing(true);
 
-        // Mapear a eventos del CustomCalendar
-        List<CustomCalendar.CalendarEvent> customEvents = eventDTOs.stream()
-                .map(dto -> new CustomCalendar.CalendarEvent(
-                        dto.getRentalId(),
-                        dto.getTitle(),
-                        dto.getStart(),
-                        dto.getEnd(),
-                        dto.getColor(),
-                        dto.getRentalId() // Pasamos el rentalId como data
-                ))
-                .collect(Collectors.toList());
+        // Rentas activas hoy
+        long activeToday = rentalService.countByStatus(RentalStatus.ACTIVE);
+        row.add(createStatCard("Rentas Activas", String.valueOf(activeToday), 
+                VaadinIcon.CAR, "#4CAF50"));
 
-        calendar.setEvents(customEvents);
+        // Rentas pendientes
+        long pending = rentalService.countByStatus(RentalStatus.PENDING);
+        row.add(createStatCard("Pendientes", String.valueOf(pending), 
+                VaadinIcon.CLOCK, "#FFC107"));
 
-        log.info("Cargados {} eventos en el calendario personalizado", customEvents.size());
+        // Entregas hoy
+        long deliveriesToday = rentalService.countEndingOn(LocalDate.now());
+        row.add(createStatCard("Entregas Hoy", String.valueOf(deliveriesToday), 
+                VaadinIcon.CALENDAR_CLOCK, "#2196F3"));
+
+        // Completadas este mes
+        long completedThisMonth = rentalService.countCompletedThisMonth();
+        row.add(createStatCard("Completadas (Mes)", String.valueOf(completedThisMonth), 
+                VaadinIcon.CHECK_CIRCLE, "#9C27B0"));
+
+        return row;
     }
 
-    private HorizontalLayout createLegend() {
-        HorizontalLayout legend = new HorizontalLayout();
-        legend.setSpacing(true);
-        legend.getStyle()
-                .set("font-size", "var(--lumo-font-size-s)")
-                .set("margin", "var(--lumo-space-xs) 0");
+    private Div createStatCard(String title, String value, VaadinIcon icon, String color) {
+        Div card = new Div();
+        card.getStyle()
+                .set("background", "var(--lumo-base-color)")
+                .set("border-radius", "var(--lumo-border-radius-l)")
+                .set("padding", "var(--lumo-space-l)")
+                .set("box-shadow", "var(--lumo-box-shadow-s)")
+                .set("flex", "1")
+                .set("min-width", "180px")
+                .set("text-align", "center");
 
-        legend.add(
-                createLegendItem("Pendiente", "#FFC107"),
-                createLegendItem("Activa", "#4CAF50"),
-                createLegendItem("Completada", "#2196F3"),
-                createLegendItem("Cancelada", "#F44336"));
+        // Icono
+        var iconElement = icon.create();
+        iconElement.setSize("40px");
+        iconElement.getStyle().set("color", color);
 
-        return legend;
+        // Valor
+        Span valueSpan = new Span(value);
+        valueSpan.getStyle()
+                .set("display", "block")
+                .set("font-size", "var(--lumo-font-size-xxxl)")
+                .set("font-weight", "bold")
+                .set("color", color)
+                .set("margin", "var(--lumo-space-s) 0");
+
+        // Título
+        Span titleSpan = new Span(title);
+        titleSpan.getStyle()
+                .set("color", "var(--lumo-secondary-text-color)")
+                .set("font-size", "var(--lumo-font-size-s)");
+
+        card.add(iconElement, valueSpan, titleSpan);
+        return card;
     }
 
-    private HorizontalLayout createLegendItem(String label, String color) {
-        HorizontalLayout item = new HorizontalLayout();
-        item.setSpacing(true);
-        item.setAlignItems(FlexComponent.Alignment.CENTER);
+    private HorizontalLayout createQuickAccessRow() {
+        HorizontalLayout row = new HorizontalLayout();
+        row.setWidthFull();
+        row.setSpacing(true);
+        row.setWrap(true);
 
-        Div colorBox = new Div();
-        colorBox.getStyle()
-                .set("width", "16px")
-                .set("height", "16px")
-                .set("background-color", color)
-                .set("border-radius", "3px");
+        row.add(createQuickAccessCard("Calendario", "Ver calendario de rentas", 
+                VaadinIcon.CALENDAR, "calendar", "#2196F3"));
+        row.add(createQuickAccessCard("Nueva Renta", "Crear una nueva renta", 
+                VaadinIcon.PLUS_CIRCLE, "rentals", "#4CAF50"));
+        row.add(createQuickAccessCard("Clientes", "Gestionar clientes", 
+                VaadinIcon.USERS, "customers", "#FF9800"));
+        row.add(createQuickAccessCard("Vehículos", "Gestionar flota", 
+                VaadinIcon.CAR, "vehicles", "#9C27B0"));
 
-        Span labelSpan = new Span(label);
-
-        item.add(colorBox, labelSpan);
-        return item;
+        return row;
     }
 
-    private void openRentalDetails(Long rentalId) {
-        try {
-            RentalDTO rental = rentalService.findById(rentalId);
-            RentalDetailsDialog dialog = new RentalDetailsDialog(rentalService, rental);
-            dialog.open();
-        } catch (Exception e) {
-            log.error("Error abriendo detalles de renta {}: {}", rentalId, e.getMessage(), e);
-        }
+    private Div createQuickAccessCard(String title, String description, VaadinIcon icon, 
+                                       String route, String color) {
+        Div card = new Div();
+        card.getStyle()
+                .set("background", "var(--lumo-base-color)")
+                .set("border-radius", "var(--lumo-border-radius-l)")
+                .set("padding", "var(--lumo-space-l)")
+                .set("box-shadow", "var(--lumo-box-shadow-s)")
+                .set("cursor", "pointer")
+                .set("transition", "transform 0.2s, box-shadow 0.2s")
+                .set("min-width", "200px")
+                .set("flex", "1");
+
+        card.getElement().addEventListener("mouseover", e -> {
+            card.getStyle().set("transform", "translateY(-2px)");
+            card.getStyle().set("box-shadow", "var(--lumo-box-shadow-m)");
+        });
+        card.getElement().addEventListener("mouseout", e -> {
+            card.getStyle().set("transform", "translateY(0)");
+            card.getStyle().set("box-shadow", "var(--lumo-box-shadow-s)");
+        });
+
+        VerticalLayout content = new VerticalLayout();
+        content.setPadding(false);
+        content.setSpacing(false);
+
+        var iconElement = icon.create();
+        iconElement.setSize("32px");
+        iconElement.getStyle().set("color", color);
+
+        Span titleSpan = new Span(title);
+        titleSpan.getStyle()
+                .set("font-weight", "600")
+                .set("font-size", "var(--lumo-font-size-l)")
+                .set("margin-top", "var(--lumo-space-s)");
+
+        Span descSpan = new Span(description);
+        descSpan.getStyle()
+                .set("color", "var(--lumo-secondary-text-color)")
+                .set("font-size", "var(--lumo-font-size-s)");
+
+        content.add(iconElement, titleSpan, descSpan);
+        card.add(content);
+
+        // Hacer clickeable
+        card.addClickListener(e -> card.getUI().ifPresent(ui -> ui.navigate(route)));
+
+        return card;
     }
 }

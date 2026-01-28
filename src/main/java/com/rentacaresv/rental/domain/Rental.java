@@ -122,6 +122,12 @@ public class Rental {
     @Column(name = "contact_phone", length = 20)
     private String contactPhone;
 
+    /**
+     * ID del evento en Google Calendar (si está sincronizado)
+     */
+    @Column(name = "google_calendar_event_id", length = 255)
+    private String googleCalendarEventId;
+
     // ========================================
     // Auditoría
     // ========================================
@@ -150,8 +156,8 @@ public class Rental {
     /**
      * Actualiza información de viaje
      */
-    public void updateTravelInfo(String flightNumber, String itinerary, 
-                                  String accommodation, String contactPhone) {
+    public void updateTravelInfo(String flightNumber, String itinerary,
+            String accommodation, String contactPhone) {
         this.flightNumber = flightNumber;
         this.travelItinerary = itinerary;
         this.accommodation = accommodation;
@@ -165,20 +171,18 @@ public class Rental {
     public void deliverVehicle() {
         if (!status.canBeDelivered()) {
             throw new IllegalStateException(
-                "Solo se puede entregar una renta en estado PENDING. Estado actual: " + status
-            );
+                    "Solo se puede entregar una renta en estado PENDING. Estado actual: " + status);
         }
-        
+
         if (!vehicle.isAvailable()) {
             throw new IllegalStateException(
-                "El vehículo " + vehicle.getLicensePlate() + " no está disponible"
-            );
+                    "El vehículo " + vehicle.getLicensePlate() + " no está disponible");
         }
-        
+
         this.actualDeliveryDate = LocalDateTime.now();
         this.status = RentalStatus.ACTIVE;
         this.updatedAt = LocalDateTime.now();
-        
+
         // Marcar vehículo como rentado (lógica de dominio de Vehicle)
         this.vehicle.markAsRented();
     }
@@ -189,14 +193,13 @@ public class Rental {
     public void returnVehicle() {
         if (!status.canBeReturned()) {
             throw new IllegalStateException(
-                "Solo se puede devolver una renta en estado ACTIVE. Estado actual: " + status
-            );
+                    "Solo se puede devolver una renta en estado ACTIVE. Estado actual: " + status);
         }
-        
+
         this.actualReturnDate = LocalDateTime.now();
         this.status = RentalStatus.COMPLETED;
         this.updatedAt = LocalDateTime.now();
-        
+
         // Marcar vehículo como disponible (lógica de dominio de Vehicle)
         this.vehicle.markAsAvailable();
     }
@@ -207,10 +210,9 @@ public class Rental {
     public void cancel() {
         if (!status.canBeModified()) {
             throw new IllegalStateException(
-                "Solo se puede cancelar una renta en estado PENDING. Estado actual: " + status
-            );
+                    "Solo se puede cancelar una renta en estado PENDING. Estado actual: " + status);
         }
-        
+
         this.status = RentalStatus.CANCELLED;
         this.updatedAt = LocalDateTime.now();
     }
@@ -222,14 +224,13 @@ public class Rental {
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("El monto debe ser mayor a cero");
         }
-        
+
         BigDecimal newTotal = this.amountPaid.add(amount);
         if (newTotal.compareTo(this.totalAmount) > 0) {
             throw new IllegalArgumentException(
-                "El pago excede el total de la renta. Total: " + totalAmount + ", Ya pagado: " + amountPaid
-            );
+                    "El pago excede el total de la renta. Total: " + totalAmount + ", Ya pagado: " + amountPaid);
         }
-        
+
         this.amountPaid = newTotal;
         this.updatedAt = LocalDateTime.now();
     }
@@ -263,9 +264,8 @@ public class Rental {
             return null;
         }
         return (int) ChronoUnit.DAYS.between(
-            actualDeliveryDate.toLocalDate(),
-            actualReturnDate.toLocalDate()
-        ) + 1; // +1 porque se cuenta el día de entrega
+                actualDeliveryDate.toLocalDate(),
+                actualReturnDate.toLocalDate()) + 1; // +1 porque se cuenta el día de entrega
     }
 
     /**
@@ -319,8 +319,7 @@ public class Rental {
     public void delete() {
         if (status == RentalStatus.ACTIVE) {
             throw new IllegalStateException(
-                "No se puede eliminar una renta activa"
-            );
+                    "No se puede eliminar una renta activa");
         }
         this.deletedAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();

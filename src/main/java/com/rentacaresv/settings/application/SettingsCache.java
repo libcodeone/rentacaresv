@@ -133,4 +133,36 @@ public class SettingsCache {
         log.info("🔄 Refrescando cache de configuración...");
         loadSettings();
     }
+
+    // ========================================
+    // Métodos de Google Calendar
+    // ========================================
+
+    /**
+     * Verifica si Google Calendar está habilitado y configurado
+     */
+    public boolean isGoogleCalendarConfigured() {
+        return getSettings().isGoogleCalendarConfigured();
+    }
+
+    /**
+     * Obtiene el Google Client ID
+     */
+    public String getGoogleClientId() {
+        return getSettings().getGoogleClientId();
+    }
+
+    /**
+     * Obtiene el Google Client Secret
+     */
+    public String getGoogleClientSecret() {
+        return getSettings().getGoogleClientSecret();
+    }
+
+    /**
+     * Verifica si Google Calendar está habilitado
+     */
+    public boolean isGoogleCalendarEnabled() {
+        return Boolean.TRUE.equals(getSettings().getGoogleCalendarEnabled());
+    }
 }
