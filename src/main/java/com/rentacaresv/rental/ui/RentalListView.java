@@ -1,9 +1,10 @@
 package com.rentacaresv.rental.ui;
 
+import com.rentacaresv.contract.application.ContractService;
+import com.rentacaresv.contract.ui.ContractDialog;
 import com.rentacaresv.customer.application.CustomerService;
 import com.rentacaresv.payment.application.PaymentService;
 import com.rentacaresv.payment.ui.RegisterPaymentDialog;
-import com.rentacaresv.rental.application.RentalContractPdfGenerator;
 import com.rentacaresv.rental.application.RentalDTO;
 import com.rentacaresv.rental.application.RentalPhotoService;
 import com.rentacaresv.rental.application.RentalService;
@@ -56,7 +57,7 @@ public class RentalListView extends VerticalLayout {
     private final PaymentService paymentService;
     private final RentalPhotoService rentalPhotoService;
     private final StorageInitializer storageInitializer;
-    private final RentalContractPdfGenerator pdfGenerator;
+    private final ContractService contractService;
 
     private Grid<RentalDTO> grid;
     private TextField searchField;
@@ -72,7 +73,7 @@ public class RentalListView extends VerticalLayout {
             PaymentService paymentService,
             RentalPhotoService rentalPhotoService,
             StorageInitializer storageInitializer,
-            RentalContractPdfGenerator pdfGenerator) {
+            ContractService contractService) {
 
         this.rentalService = rentalService;
         this.vehicleService = vehicleService;
@@ -81,7 +82,7 @@ public class RentalListView extends VerticalLayout {
         this.paymentService = paymentService;
         this.rentalPhotoService = rentalPhotoService;
         this.storageInitializer = storageInitializer;
-        this.pdfGenerator = pdfGenerator;
+        this.contractService = contractService;
 
         setSizeFull();
         setPadding(true);
@@ -331,12 +332,26 @@ public class RentalListView extends VerticalLayout {
         HorizontalLayout actions = new HorizontalLayout();
         actions.setSpacing(false);
 
+        // Ver Detalles
         Button detailsButton = new Button(VaadinIcon.EYE.create());
         detailsButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
         detailsButton.getElement().setAttribute("title", "Ver Detalles");
         detailsButton.addClickListener(e -> showDetails(rental));
         actions.add(detailsButton);
 
+        // Contrato Digital (nuevo botón)
+        Button contractButton = new Button(VaadinIcon.FILE_TEXT_O.create());
+        contractButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+        contractButton.getElement().setAttribute("title", "Contrato Digital");
+        // Indicar si ya tiene contrato
+        if (contractService.existsForRental(rental.getId())) {
+            contractButton.addThemeVariants(ButtonVariant.LUMO_SUCCESS);
+            contractButton.getElement().setAttribute("title", "Ver Contrato Digital");
+        }
+        contractButton.addClickListener(e -> openContractDialog(rental));
+        actions.add(contractButton);
+
+        // Registrar Pago
         if (rental.getBalance() != null && rental.getBalance().compareTo(java.math.BigDecimal.ZERO) > 0) {
             Button paymentButton = new Button(VaadinIcon.MONEY.create());
             paymentButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_SUCCESS);
@@ -345,6 +360,7 @@ public class RentalListView extends VerticalLayout {
             actions.add(paymentButton);
         }
 
+        // Acciones según estado
         if ("PENDING".equals(rental.getStatus())) {
             Button deliverButton = new Button(VaadinIcon.CAR.create());
             deliverButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_SUCCESS);
@@ -385,6 +401,12 @@ public class RentalListView extends VerticalLayout {
         dialog.open();
     }
 
+    private void openContractDialog(RentalDTO rental) {
+        ContractDialog dialog = new ContractDialog(contractService, rental.getId());
+        dialog.setOnContractCreated(this::refreshData);
+        dialog.open();
+    }
+
     private void registerPayment(RentalDTO rental) {
         RegisterPaymentDialog dialog = new RegisterPaymentDialog(paymentService, rental);
         dialog.addSaveListener(e -> {
@@ -396,7 +418,7 @@ public class RentalListView extends VerticalLayout {
 
     private void openDeliveryDialog(RentalDTO rental) {
         DeliveryDialog dialog = new DeliveryDialog(
-                rentalService, rentalPhotoService, storageInitializer, pdfGenerator, rental);
+                rentalService, rentalPhotoService, storageInitializer, rental);
         dialog.addDeliveryConfirmedListener(e -> {
             refreshData();
             showSuccessNotification("Vehículo entregado exitosamente");

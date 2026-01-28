@@ -22,7 +22,7 @@ public enum DocumentType {
     /**
      * Otro tipo de documento
      */
-    OTHER;
+    OTHER, LICENSE;
 
     public String getLabel() {
         return switch (this) {
@@ -30,6 +30,8 @@ public enum DocumentType {
             case PASSPORT -> "Pasaporte";
             case DRIVERS_LICENSE -> "Licencia de Conducir";
             case OTHER -> "Otro";
+            case LICENSE -> "Licencia";
+            default -> throw new IllegalArgumentException("Unexpected value: " + this);
         };
     }
 }
