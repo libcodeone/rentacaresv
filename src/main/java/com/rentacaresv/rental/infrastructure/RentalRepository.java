@@ -147,4 +147,16 @@ public interface RentalRepository extends JpaRepository<Rental, Long>, JpaSpecif
      */
     @Query("SELECT COUNT(r) FROM Rental r WHERE r.deletedAt IS NULL")
     long countAllActive();
+
+    /**
+     * Cuenta rentas que terminan en una fecha específica
+     */
+    @Query("SELECT COUNT(r) FROM Rental r WHERE r.endDate = :date AND r.status IN ('ACTIVE', 'PENDING') AND r.deletedAt IS NULL")
+    long countByEndDate(@Param("date") LocalDate date);
+
+    /**
+     * Cuenta rentas completadas en un rango de fechas
+     */
+    @Query("SELECT COUNT(r) FROM Rental r WHERE r.status = 'COMPLETED' AND CAST(r.actualReturnDate AS LocalDate) BETWEEN :startDate AND :endDate AND r.deletedAt IS NULL")
+    long countCompletedBetweenDates(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 }

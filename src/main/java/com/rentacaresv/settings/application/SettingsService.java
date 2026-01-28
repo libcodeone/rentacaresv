@@ -126,6 +126,15 @@ public class SettingsService {
     }
 
     /**
+     * Actualiza la configuración completa (incluyendo email)
+     */
+    @Transactional
+    public void updateSettings(Settings settings) {
+        settingsCache.updateSettings(settings);
+        log.info("Configuración actualizada");
+    }
+
+    /**
      * Fuerza recarga del cache desde BD
      */
     public void refreshCache() {

@@ -8,7 +8,12 @@ public enum FolderType {
     CARS("cars"),
     CAR_DETAILS("car_details"),
     LOGOS("logos"),
-    SETTINGS("settings");
+    SETTINGS("settings"),
+    CONTRACTS("contracts"),           // Carpeta principal de contratos
+    CONTRACT_SIGNATURES("contracts/signatures"),  // Firmas digitales
+    CONTRACT_DOCUMENTS("contracts/documents"),    // Fotos de documentos de identidad
+    CONTRACT_DIAGRAMS("contracts/diagrams"),      // Diagramas con marcas de daños
+    CONTRACT_PDFS("contracts/pdfs");              // PDFs generados
 
     private final String folderName;
 
