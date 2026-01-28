@@ -48,24 +48,20 @@ public class DeliveryDialog extends Dialog {
     private final RentalService rentalService;
     private final RentalPhotoService rentalPhotoService;
     private final StorageInitializer storageInitializer;
-    private final RentalContractPdfGenerator pdfGenerator;
     private final RentalDTO rental;
 
     private RentalPhotoUploadPanel photoPanel;
     private TextArea notesField;
-    private Button generateContractButton;
     private Button confirmButton;
     private Button cancelButton;
 
     public DeliveryDialog(RentalService rentalService,
             RentalPhotoService rentalPhotoService,
             StorageInitializer storageInitializer,
-            RentalContractPdfGenerator pdfGenerator,
             RentalDTO rental) {
         this.rentalService = rentalService;
         this.rentalPhotoService = rentalPhotoService;
         this.storageInitializer = storageInitializer;
-        this.pdfGenerator = pdfGenerator;
         this.rental = rental;
 
         configureDialog();
@@ -188,10 +184,7 @@ public class DeliveryDialog extends Dialog {
     }
 
     private void createFooter() {
-        generateContractButton = new Button("Generar Contrato", VaadinIcon.FILE_TEXT_O.create());
-        generateContractButton.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
-        generateContractButton.addClickListener(e -> generateContract());
-
+       
         confirmButton = new Button("Confirmar Entrega", VaadinIcon.CHECK.create());
         confirmButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SUCCESS);
         confirmButton.addClickListener(e -> confirmDelivery());
@@ -199,121 +192,12 @@ public class DeliveryDialog extends Dialog {
         cancelButton = new Button("Cancelar", VaadinIcon.CLOSE.create());
         cancelButton.addClickListener(e -> close());
 
-        HorizontalLayout footer = new HorizontalLayout(generateContractButton, confirmButton, cancelButton);
+        HorizontalLayout footer = new HorizontalLayout( confirmButton, cancelButton);
         footer.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
         footer.setWidthFull();
         footer.getStyle().set("padding", "1rem");
 
         getFooter().add(footer);
-    }
-
-    private void generateContract() {
-        try {
-            // Obtener la renta completa desde el servicio
-            Rental rental = rentalService.findRentalEntityById(this.rental.getId());
-
-            // Obtener notas de entrega
-            String deliveryNotes = notesField.getValue();
-
-            // Obtener URLs de fotos pendientes (simulado)
-            List<String> photoUrls = new ArrayList<>();
-
-            // Generar PDF
-            byte[] pdfBytes = pdfGenerator.generateContract(rental, deliveryNotes, photoUrls);
-
-            // Mostrar PDF en modal con previsualizador
-            showPdfPreview(pdfBytes, rental.getContractNumber());
-
-            showSuccessNotification("Contrato generado exitosamente");
-
-        } catch (Exception e) {
-            log.error("Error generando contrato PDF: {}", e.getMessage(), e);
-            showErrorNotification("Error al generar contrato: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Muestra el PDF en un modal con previsualizador
-     */
-    private void showPdfPreview(byte[] pdfBytes, String contractNumber) {
-        // Crear dialog para el previsualizador
-        Dialog pdfDialog = new Dialog();
-        pdfDialog.setWidth("900px");
-        pdfDialog.setHeight("700px");
-        pdfDialog.setModal(true);
-        pdfDialog.setDraggable(false);
-        pdfDialog.setCloseOnOutsideClick(false);
-        
-        // Título del modal con icono
-        HorizontalLayout dialogTitleLayout = new HorizontalLayout();
-        dialogTitleLayout.setAlignItems(FlexComponent.Alignment.CENTER);
-        Icon pdfIcon = VaadinIcon.FILE_TEXT.create();
-        pdfIcon.setSize("20px");
-        H3 dialogTitle = new H3("Contrato - " + contractNumber);
-        dialogTitle.getStyle().set("margin", "0");
-        dialogTitleLayout.add(pdfIcon, dialogTitle);
-        
-        // Botón cerrar con icono
-        Button closeIcon = new Button(new Icon("lumo", "cross"));
-        closeIcon.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ICON);
-        closeIcon.addClickListener(e -> pdfDialog.close());
-        
-        // Header
-        HorizontalLayout header = new HorizontalLayout(dialogTitleLayout, closeIcon);
-        header.setWidthFull();
-        header.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
-        header.setAlignItems(FlexComponent.Alignment.CENTER);
-        header.setPadding(false);
-        header.setSpacing(false);
-        
-        // Convertir PDF a Base64
-        String base64Pdf = java.util.Base64.getEncoder().encodeToString(pdfBytes);
-        String pdfDataUri = "data:application/pdf;base64," + base64Pdf;
-        
-        // Crear HTML object para mostrar el PDF
-        com.vaadin.flow.component.Html pdfViewer = new com.vaadin.flow.component.Html(
-            "<object data='" + pdfDataUri + "' " +
-            "type='application/pdf' " +
-            "style='width: 100%; height: 550px; border: 1px solid #e0e0e0;'>" +
-            "<p>No se puede visualizar el PDF</p>" +
-            "</object>"
-        );
-        
-        // Crear recurso para descarga
-        StreamResource resource = new StreamResource(
-            "Contrato_" + contractNumber + ".pdf",
-            () -> new ByteArrayInputStream(pdfBytes)
-        );
-        resource.setContentType("application/pdf");
-        
-        // Botón de descarga
-        Anchor downloadLink = new Anchor(resource, "");
-        downloadLink.getElement().setAttribute("download", true);
-        downloadLink.getStyle().set("text-decoration", "none");
-        
-        Button downloadButton = new Button("Descargar", VaadinIcon.DOWNLOAD.create());
-        downloadButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        downloadButton.addClickListener(e -> downloadLink.getElement().callJsFunction("click"));
-        downloadLink.add(downloadButton);
-        
-        Button closeButton = new Button("Cerrar");
-        closeButton.addClickListener(e -> pdfDialog.close());
-        
-        // Footer
-        HorizontalLayout footer = new HorizontalLayout(downloadLink, closeButton);
-        footer.setWidthFull();
-        footer.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
-        footer.setPadding(false);
-        footer.setSpacing(true);
-        
-        // Layout principal
-        VerticalLayout content = new VerticalLayout(header, pdfViewer, footer);
-        content.setSizeFull();
-        content.setPadding(true);
-        content.setSpacing(true);
-        
-        pdfDialog.add(content);
-        pdfDialog.open();
     }
 
     private void confirmDelivery() {

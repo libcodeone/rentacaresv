@@ -3,7 +3,7 @@
     flex-direction: column;
     height: 100%;
     width: 100%;
-    background-color: white;
+    background-color: var(--lumo-base-color);
     border-radius: var(--lumo-border-radius-m);
     box-shadow: var(--lumo-box-shadow-s);
     overflow: hidden;
@@ -39,6 +39,7 @@
     overflow-x: auto;
     min-height: 0;
     position: relative;
+    background-color: var(--lumo-base-color);
 }
 
 .calendar-grid {
@@ -69,7 +70,7 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    background-color: white;
+    background-color: var(--lumo-base-color);
     position: relative;
     cursor: pointer;
     transition: background-color 0.15s ease;
@@ -118,11 +119,12 @@
     flex-shrink: 0;
     min-width: 24px;
     text-align: center;
+    color: var(--lumo-body-text-color);
 }
 
 .calendar-day.today .day-number {
     background-color: var(--lumo-primary-color);
-    color: white;
+    color: var(--lumo-primary-contrast-color);
 }
 
 .calendar-events-container {
@@ -184,10 +186,10 @@
     left: calc(100% + 4px);
     min-width: 250px;
     max-width: 320px;
-    background-color: white;
+    background-color: var(--lumo-base-color);
     border-radius: var(--lumo-border-radius-m);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-    border: 1px solid var(--lumo-contrast-10pct);
+    box-shadow: var(--lumo-box-shadow-l);
+    border: 1px solid var(--lumo-contrast-20pct);
     padding: var(--lumo-space-m);
     opacity: 0;
     visibility: hidden;
@@ -232,6 +234,31 @@
     gap: var(--lumo-space-xs);
     max-height: 300px;
     overflow-y: auto;
+}
+
+/* ========== DARK MODE ADJUSTMENTS ========== */
+/* Estas variables de Lumo se adaptan automáticamente al modo oscuro */
+/* --lumo-base-color: blanco en light, gris oscuro en dark */
+/* --lumo-contrast-*: invertido automáticamente */
+/* --lumo-body-text-color: negro en light, blanco en dark */
+
+/* Ajuste adicional para mejor contraste en modo oscuro */
+[theme~="dark"] .calendar-day {
+    border-color: var(--lumo-contrast-20pct);
+}
+
+[theme~="dark"] .calendar-weekday-header {
+    border-color: var(--lumo-contrast-20pct);
+}
+
+[theme~="dark"] .calendar-hover-popup {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+[theme~="dark"] .calendar-event,
+[theme~="dark"] .calendar-event-full {
+    /* Asegurar que el texto sea legible sobre colores de fondo */
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 /* ========== RESPONSIVE ========== */

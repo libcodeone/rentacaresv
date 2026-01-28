@@ -46,6 +46,110 @@ public class Settings implements Serializable {
     private Boolean foldersInitialized = false;
 
     // ========================================
+    // Configuración de Email (SMTP)
+    // ========================================
+
+    /**
+     * Habilitar/deshabilitar envío de emails
+     */
+    @Column(name = "email_enabled")
+    private Boolean emailEnabled = true;
+
+    /**
+     * Servidor SMTP (ej: smtp.hostinger.com, smtp.gmail.com)
+     */
+    @Column(name = "mail_host", length = 100)
+    private String mailHost;
+
+    /**
+     * Puerto SMTP (ej: 587, 465, 25)
+     */
+    @Column(name = "mail_port")
+    private Integer mailPort;
+
+    /**
+     * Usuario/email para autenticación SMTP
+     */
+    @Column(name = "mail_username", length = 200)
+    private String mailUsername;
+
+    /**
+     * Contraseña para autenticación SMTP
+     */
+    @Column(name = "mail_password", length = 200)
+    private String mailPassword;
+
+    /**
+     * Email que aparece como remitente (From)
+     */
+    @Column(name = "mail_from", length = 200)
+    private String mailFrom;
+
+    /**
+     * Nombre que aparece como remitente
+     */
+    @Column(name = "mail_from_name", length = 200)
+    private String mailFromName;
+
+    /**
+     * Habilitar autenticación SMTP
+     */
+    @Column(name = "mail_smtp_auth")
+    private Boolean mailSmtpAuth = true;
+
+    /**
+     * Habilitar STARTTLS
+     */
+    @Column(name = "mail_starttls_enable")
+    private Boolean mailStarttlsEnable = true;
+
+    /**
+     * Habilitar SSL (para puerto 465)
+     */
+    @Column(name = "mail_ssl_enable")
+    private Boolean mailSslEnable = false;
+
+    /**
+     * Protocolo de transporte (smtp)
+     */
+    @Column(name = "mail_protocol", length = 20)
+    private String mailProtocol = "smtp";
+
+    /**
+     * Timeout de conexión en milisegundos
+     */
+    @Column(name = "mail_connection_timeout")
+    private Integer mailConnectionTimeout = 10000;
+
+    /**
+     * Timeout de lectura en milisegundos
+     */
+    @Column(name = "mail_timeout")
+    private Integer mailTimeout = 10000;
+
+    // ========================================
+    // Configuración de Google Calendar
+    // ========================================
+
+    /**
+     * Habilitar integración con Google Calendar
+     */
+    @Column(name = "google_calendar_enabled")
+    private Boolean googleCalendarEnabled = false;
+
+    /**
+     * Google OAuth2 Client ID
+     */
+    @Column(name = "google_client_id", length = 500)
+    private String googleClientId;
+
+    /**
+     * Google OAuth2 Client Secret
+     */
+    @Column(name = "google_client_secret", length = 500)
+    private String googleClientSecret;
+
+    // ========================================
     // Auditoría
     // ========================================
 
@@ -153,6 +257,161 @@ public class Settings implements Serializable {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    // ========================================
+    // Getters/Setters Email
+    // ========================================
+
+    public Boolean getEmailEnabled() {
+        return emailEnabled;
+    }
+
+    public void setEmailEnabled(Boolean emailEnabled) {
+        this.emailEnabled = emailEnabled;
+    }
+
+    public String getMailHost() {
+        return mailHost;
+    }
+
+    public void setMailHost(String mailHost) {
+        this.mailHost = mailHost;
+    }
+
+    public Integer getMailPort() {
+        return mailPort;
+    }
+
+    public void setMailPort(Integer mailPort) {
+        this.mailPort = mailPort;
+    }
+
+    public String getMailUsername() {
+        return mailUsername;
+    }
+
+    public void setMailUsername(String mailUsername) {
+        this.mailUsername = mailUsername;
+    }
+
+    public String getMailPassword() {
+        return mailPassword;
+    }
+
+    public void setMailPassword(String mailPassword) {
+        this.mailPassword = mailPassword;
+    }
+
+    public String getMailFrom() {
+        return mailFrom;
+    }
+
+    public void setMailFrom(String mailFrom) {
+        this.mailFrom = mailFrom;
+    }
+
+    public String getMailFromName() {
+        return mailFromName;
+    }
+
+    public void setMailFromName(String mailFromName) {
+        this.mailFromName = mailFromName;
+    }
+
+    public Boolean getMailSmtpAuth() {
+        return mailSmtpAuth;
+    }
+
+    public void setMailSmtpAuth(Boolean mailSmtpAuth) {
+        this.mailSmtpAuth = mailSmtpAuth;
+    }
+
+    public Boolean getMailStarttlsEnable() {
+        return mailStarttlsEnable;
+    }
+
+    public void setMailStarttlsEnable(Boolean mailStarttlsEnable) {
+        this.mailStarttlsEnable = mailStarttlsEnable;
+    }
+
+    public Boolean getMailSslEnable() {
+        return mailSslEnable;
+    }
+
+    public void setMailSslEnable(Boolean mailSslEnable) {
+        this.mailSslEnable = mailSslEnable;
+    }
+
+    public String getMailProtocol() {
+        return mailProtocol;
+    }
+
+    public void setMailProtocol(String mailProtocol) {
+        this.mailProtocol = mailProtocol;
+    }
+
+    public Integer getMailConnectionTimeout() {
+        return mailConnectionTimeout;
+    }
+
+    public void setMailConnectionTimeout(Integer mailConnectionTimeout) {
+        this.mailConnectionTimeout = mailConnectionTimeout;
+    }
+
+    public Integer getMailTimeout() {
+        return mailTimeout;
+    }
+
+    public void setMailTimeout(Integer mailTimeout) {
+        this.mailTimeout = mailTimeout;
+    }
+
+    /**
+     * Verifica si la configuración de email está completa
+     */
+    public boolean isEmailConfigured() {
+        return mailHost != null && !mailHost.isEmpty() &&
+               mailPort != null &&
+               mailUsername != null && !mailUsername.isEmpty() &&
+               mailPassword != null && !mailPassword.isEmpty();
+    }
+
+    // ========================================
+    // Getters/Setters Google Calendar
+    // ========================================
+
+    public Boolean getGoogleCalendarEnabled() {
+        return googleCalendarEnabled;
+    }
+
+    public void setGoogleCalendarEnabled(Boolean googleCalendarEnabled) {
+        this.googleCalendarEnabled = googleCalendarEnabled;
+    }
+
+    public String getGoogleClientId() {
+        return googleClientId;
+    }
+
+    public void setGoogleClientId(String googleClientId) {
+        this.googleClientId = googleClientId;
+    }
+
+    public String getGoogleClientSecret() {
+        return googleClientSecret;
+    }
+
+    public void setGoogleClientSecret(String googleClientSecret) {
+        this.googleClientSecret = googleClientSecret;
+    }
+
+    /**
+     * Verifica si la configuración de Google Calendar está completa
+     */
+    public boolean isGoogleCalendarConfigured() {
+        return Boolean.TRUE.equals(googleCalendarEnabled) &&
+               googleClientId != null && !googleClientId.isEmpty() &&
+               googleClientSecret != null && !googleClientSecret.isEmpty();
     }
 
     public Settings(Long id, String tenantId, String companyName, String logoUrl, Boolean foldersInitialized,
