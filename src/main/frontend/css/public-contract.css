@@ -1,0 +1,480 @@
+/* ========================================
+   CSS para la vista pública del contrato
+   Formato similar al papel físico
+   ======================================== */
+
+.public-contract-view {
+    background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+    min-height: 100vh;
+}
+
+/* Header compacto */
+.contract-header-compact {
+    background: white;
+    padding: var(--lumo-space-m) var(--lumo-space-l);
+    border-bottom: 3px solid var(--lumo-primary-color);
+    box-shadow: var(--lumo-box-shadow-s);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+/* Contenido principal */
+.contract-main-content {
+    padding-bottom: var(--lumo-space-xl) !important;
+}
+
+/* Secciones del contrato */
+.contract-section {
+    background: white;
+    border: 1px solid var(--lumo-contrast-20pct);
+    border-radius: var(--lumo-border-radius-m);
+    padding: var(--lumo-space-m);
+    margin-bottom: var(--lumo-space-m);
+    page-break-inside: avoid;
+}
+
+.contract-section h3 {
+    margin: 0 0 var(--lumo-space-m) 0;
+    padding-bottom: var(--lumo-space-s);
+    border-bottom: 2px solid var(--lumo-primary-color);
+    color: var(--lumo-primary-color);
+    font-size: var(--lumo-font-size-l);
+}
+
+/* Grid de accesorios */
+.accessories-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--lumo-space-s);
+}
+
+.accessories-grid vaadin-checkbox {
+    padding: var(--lumo-space-xs);
+    border: 1px solid var(--lumo-contrast-10pct);
+    border-radius: var(--lumo-border-radius-s);
+    background: var(--lumo-contrast-5pct);
+}
+
+.accessories-grid vaadin-checkbox:hover {
+    background: var(--lumo-contrast-10pct);
+}
+
+/* Caja de notas */
+.note-box {
+    background: var(--lumo-warning-color-10pct) !important;
+    border-left: 4px solid var(--lumo-warning-color);
+}
+
+/* Diagrama de daños */
+.damage-diagram-container {
+    position: relative;
+    background: white;
+    border: 2px solid var(--lumo-contrast-20pct);
+    border-radius: var(--lumo-border-radius-m);
+    min-height: 350px;
+    cursor: crosshair;
+    overflow: hidden;
+}
+
+.damage-diagram-container .svg-wrapper {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.damage-diagram-container svg {
+    width: 100%;
+    max-height: 350px;
+    height: auto;
+}
+
+.damage-marker {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 12px;
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    z-index: 10;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: translate(-50%, -50%) scale(1); }
+    50% { transform: translate(-50%, -50%) scale(1.1); }
+    100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+.damage-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--lumo-space-s);
+    padding: var(--lumo-space-s);
+    background: var(--lumo-contrast-5pct);
+    border-radius: var(--lumo-border-radius-m);
+    margin-bottom: var(--lumo-space-m);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: var(--lumo-space-xs);
+    font-size: var(--lumo-font-size-s);
+    padding: var(--lumo-space-xs) var(--lumo-space-s);
+    background: white;
+    border-radius: var(--lumo-border-radius-s);
+    border: 1px solid var(--lumo-contrast-10pct);
+}
+
+.legend-color {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 10px;
+}
+
+.damage-list {
+    margin-top: var(--lumo-space-m);
+    padding: var(--lumo-space-m);
+    background: var(--lumo-contrast-5pct);
+    border-radius: var(--lumo-border-radius-m);
+}
+
+/* Términos y condiciones */
+.contract-terms {
+    background: var(--lumo-contrast-5pct);
+    padding: var(--lumo-space-m);
+    border-radius: var(--lumo-border-radius-m);
+    max-height: 200px;
+    overflow-y: auto;
+    margin-bottom: var(--lumo-space-m);
+    border: 1px solid var(--lumo-contrast-20pct);
+}
+
+.contract-terms ul {
+    margin: 0;
+    padding-left: var(--lumo-space-l);
+}
+
+.contract-terms li {
+    margin-bottom: var(--lumo-space-xs);
+}
+
+/* Caja de firma */
+.signature-box {
+    display: flex;
+    justify-content: center;
+    padding: var(--lumo-space-m);
+    background: var(--lumo-contrast-5pct);
+    border-radius: var(--lumo-border-radius-m);
+    margin: var(--lumo-space-s) 0;
+}
+
+.signature-box canvas {
+    max-width: 100%;
+    box-shadow: var(--lumo-box-shadow-s);
+}
+
+/* Estados finales */
+.success-container,
+.error-container {
+    text-align: center;
+    padding: var(--lumo-space-xl);
+    background: white;
+    border-radius: var(--lumo-border-radius-l);
+    box-shadow: var(--lumo-box-shadow-m);
+    max-width: 500px;
+    margin: var(--lumo-space-xl) auto;
+}
+
+.success-container {
+    border-top: 4px solid var(--lumo-success-color);
+}
+
+.success-container vaadin-icon {
+    color: var(--lumo-success-color);
+    width: 64px;
+    height: 64px;
+}
+
+.error-container {
+    border-top: 4px solid var(--lumo-error-color);
+}
+
+.error-container vaadin-icon {
+    color: var(--lumo-error-color);
+    width: 64px;
+    height: 64px;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .contract-header-compact {
+        padding: var(--lumo-space-s);
+    }
+    
+    .accessories-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .damage-legend {
+        justify-content: center;
+    }
+    
+    .damage-diagram-container {
+        min-height: 250px;
+    }
+    
+    .signature-box canvas {
+        width: 100% !important;
+        height: 120px !important;
+    }
+}
+
+@media print {
+    .public-contract-view {
+        background: white;
+    }
+    
+    .contract-header-compact {
+        position: relative;
+        box-shadow: none;
+    }
+    
+    .contract-section {
+        box-shadow: none;
+        border: 1px solid #ccc;
+        page-break-inside: avoid;
+    }
+    
+    .damage-diagram-container {
+        border: 1px solid #ccc;
+    }
+    
+    vaadin-button {
+        display: none !important;
+    }
+}
+
+/* ========================================
+   Estilos anteriores mantenidos por compatibilidad
+   ======================================== */
+
+/* Header antiguo */
+.contract-header {
+    background: white;
+    padding: var(--lumo-space-l);
+    border-radius: var(--lumo-border-radius-l);
+    box-shadow: var(--lumo-box-shadow-s);
+    text-align: center;
+    width: 100%;
+    max-width: 800px;
+    margin-bottom: var(--lumo-space-m);
+}
+
+.contract-logo {
+    height: 60px;
+    margin-bottom: var(--lumo-space-m);
+}
+
+.contract-title {
+    color: var(--lumo-primary-color);
+    margin: 0 0 var(--lumo-space-m) 0;
+    font-size: var(--lumo-font-size-xxl);
+}
+
+.contract-info {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--lumo-space-m);
+}
+
+.contract-info p {
+    margin: 0;
+    padding: var(--lumo-space-xs) var(--lumo-space-m);
+    background: var(--lumo-contrast-5pct);
+    border-radius: var(--lumo-border-radius-m);
+    font-size: var(--lumo-font-size-s);
+}
+
+/* Indicador de pasos (wizard antiguo) */
+.steps-indicator {
+    background: white;
+    padding: var(--lumo-space-m);
+    border-radius: var(--lumo-border-radius-l);
+    box-shadow: var(--lumo-box-shadow-s);
+    margin-bottom: var(--lumo-space-m);
+}
+
+.step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--lumo-space-xs);
+    opacity: 0.5;
+    transition: all 0.3s ease;
+}
+
+.step.active {
+    opacity: 1;
+}
+
+.step.completed {
+    opacity: 0.8;
+}
+
+.step-number {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--lumo-contrast-20pct);
+    color: var(--lumo-contrast-80pct);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+.step.active .step-number {
+    background: var(--lumo-primary-color);
+    color: white;
+}
+
+.step.completed .step-number {
+    background: var(--lumo-success-color);
+    color: white;
+}
+
+.step-name {
+    font-size: var(--lumo-font-size-xs);
+    color: var(--lumo-secondary-text-color);
+}
+
+.step.active .step-name {
+    color: var(--lumo-primary-text-color);
+    font-weight: 500;
+}
+
+/* Contenido */
+.contract-content {
+    background: white;
+    border-radius: var(--lumo-border-radius-l);
+    box-shadow: var(--lumo-box-shadow-s);
+}
+
+/* Upload de fotos */
+.photo-upload-container {
+    margin-bottom: var(--lumo-space-m);
+    padding: var(--lumo-space-m);
+    border: 2px dashed var(--lumo-contrast-20pct);
+    border-radius: var(--lumo-border-radius-m);
+}
+
+.upload-label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: var(--lumo-space-s);
+}
+
+.photo-preview {
+    min-height: 150px;
+    background: var(--lumo-contrast-5pct);
+    border-radius: var(--lumo-border-radius-m);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: var(--lumo-space-s);
+    overflow: hidden;
+}
+
+.preview-image {
+    max-width: 100%;
+    max-height: 200px;
+    object-fit: contain;
+}
+
+/* Info del vehículo */
+.vehicle-info-card,
+.rental-info-card {
+    background: var(--lumo-contrast-5pct);
+    padding: var(--lumo-space-m);
+    border-radius: var(--lumo-border-radius-m);
+    margin-bottom: var(--lumo-space-m);
+}
+
+.vehicle-info-card h3,
+.rental-info-card h3 {
+    margin-top: 0;
+    color: var(--lumo-primary-color);
+}
+
+.vehicle-info-card p,
+.rental-info-card p {
+    margin: var(--lumo-space-xs) 0;
+}
+
+/* Accesorios (wizard antiguo) */
+.accessory-category-title {
+    margin-top: var(--lumo-space-l);
+    margin-bottom: var(--lumo-space-s);
+    padding-bottom: var(--lumo-space-xs);
+    border-bottom: 2px solid var(--lumo-primary-color);
+    color: var(--lumo-primary-color);
+}
+
+.accessory-row {
+    padding: var(--lumo-space-xs) 0;
+    border-bottom: 1px solid var(--lumo-contrast-10pct);
+}
+
+.accessory-row:last-child {
+    border-bottom: none;
+}
+
+/* Firma (wizard antiguo) */
+.signature-container {
+    display: flex;
+    justify-content: center;
+    padding: var(--lumo-space-m);
+    background: var(--lumo-contrast-5pct);
+    border-radius: var(--lumo-border-radius-m);
+    margin: var(--lumo-space-m) 0;
+}
+
+.signature-container canvas {
+    max-width: 100%;
+}
+
+/* Resumen */
+.contract-summary {
+    background: var(--lumo-primary-color-10pct);
+    padding: var(--lumo-space-m);
+    border-radius: var(--lumo-border-radius-m);
+    margin-bottom: var(--lumo-space-m);
+    border-left: 4px solid var(--lumo-primary-color);
+}
+
+.contract-summary h3 {
+    margin-top: 0;
+    color: var(--lumo-primary-color);
+}
+
+.contract-summary p {
+    margin: var(--lumo-space-xs) 0;
+}
