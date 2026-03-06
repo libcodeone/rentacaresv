@@ -119,11 +119,18 @@ public class ContractCatalogView extends VerticalLayout {
 
         // Grid de accesorios
         accessoryGrid = new Grid<>(AccessoryCatalog.class, false);
+        
+        // Columna de Acciones (PRIMERA - FIJA)
+        accessoryGrid.addComponentColumn(this::createAccessoryActions)
+                .setHeader("Acciones")
+                .setWidth("120px")
+                .setFlexGrow(0)
+                .setFrozen(true);
+        
         accessoryGrid.addColumn(AccessoryCatalog::getName).setHeader("Nombre").setFlexGrow(2);
         accessoryGrid.addColumn(acc -> acc.getCategory().name()).setHeader("Categoría").setFlexGrow(1);
         accessoryGrid.addColumn(AccessoryCatalog::getDisplayOrder).setHeader("Orden").setWidth("80px");
         accessoryGrid.addColumn(acc -> acc.getIsActive() ? "Activo" : "Inactivo").setHeader("Estado").setWidth("100px");
-        accessoryGrid.addComponentColumn(this::createAccessoryActions).setHeader("Acciones").setWidth("150px");
 
         accessoryGrid.setItems(accessoryRepository.findAll());
         accessoryGrid.setSizeFull();
@@ -243,11 +250,18 @@ public class ContractCatalogView extends VerticalLayout {
 
         // Grid de diagramas
         diagramGrid = new Grid<>(VehicleDiagram.class, false);
+        
+        // Columna de Acciones (PRIMERA - FIJA)
+        diagramGrid.addComponentColumn(this::createDiagramActions)
+                .setHeader("Acciones")
+                .setWidth("150px")
+                .setFlexGrow(0)
+                .setFrozen(true);
+        
         diagramGrid.addComponentColumn(this::createDiagramPreview).setHeader("Vista Previa").setWidth("120px");
         diagramGrid.addColumn(diagram -> diagram.getVehicleType().name()).setHeader("Tipo de Vehículo").setFlexGrow(1);
         diagramGrid.addColumn(VehicleDiagram::getName).setHeader("Nombre").setFlexGrow(1);
         diagramGrid.addColumn(diagram -> diagram.getIsActive() ? "Activo" : "Inactivo").setHeader("Estado").setWidth("100px");
-        diagramGrid.addComponentColumn(this::createDiagramActions).setHeader("Acciones").setWidth("200px");
 
         refreshDiagramGrid();
         diagramGrid.setSizeFull();

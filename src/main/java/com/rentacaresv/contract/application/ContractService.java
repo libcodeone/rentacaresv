@@ -527,6 +527,116 @@ public class ContractService {
     // DTOs internos
     // ========================================
 
+    /**
+     * Firma el contrato con firma del cliente Y del empleado
+     */
+    @Transactional
+    public Contract signContractWithEmployeeSignature(String token, 
+                                                       String clientSignatureBase64, 
+                                                       String employeeSignatureBase64,
+                                                       String employeeName,
+                                                       String ipAddress, 
+                                                       String userAgent) {
+        log.info("Firmando contrato con ambas firmas. Token: {}", token);
+
+        Contract contract = findByToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("Contrato no encontrado"));
+
+        if (!contract.canBeSigned()) {
+            throw new IllegalStateException("El contrato no puede ser firmado. Estado: " + contract.getStatus());
+        }
+
+        // Subir firma del cliente
+        String clientSignatureUrl = uploadBase64Image(clientSignatureBase64, "signature_client_" + contract.getId(), 
+                FolderType.CONTRACT_SIGNATURES);
+
+        // Subir firma del empleado
+        String employeeSignatureUrl = uploadBase64Image(employeeSignatureBase64, "signature_employee_" + contract.getId(), 
+                FolderType.CONTRACT_SIGNATURES);
+
+        // Firmar contrato (cliente)
+        contract.sign(clientSignatureUrl, ipAddress, userAgent);
+        
+        // Guardar firma y nombre del empleado
+        contract.setEmployeeSignatureUrl(employeeSignatureUrl);
+        contract.setEmployeeName(employeeName);
+        
+        contract = contractRepository.save(contract);
+
+        log.info("✅ Contrato firmado con ambas firmas. ID: {}", contract.getId());
+
+        // Generar PDF y guardarlo
+        try {
+            contract = generateAndSavePdf(contract);
+            
+            // Enviar contrato firmado por email (asíncrono)
+            emailService.sendSignedContractEmail(contract);
+            
+        } catch (Exception e) {
+            log.error("Error generando PDF o enviando email: {}", e.getMessage(), e);
+            // No lanzamos excepción para no bloquear la firma
+        }
+
+        return contract;
+    }
+
+    /**
+     * Actualiza información del documento con fotos de licencia y documento de identidad
+     */
+    @Transactional
+    public Contract updateDocumentInfoWithPhotos(String token,
+                                                  DocumentType documentType,
+                                                  String documentNumber,
+                                                  String documentFrontBase64,
+                                                  String documentBackBase64,
+                                                  String licenseFrontBase64,
+                                                  String licenseBackBase64) {
+        Contract contract = findByToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("Contrato no encontrado"));
+
+        if (!contract.canBeAccessed()) {
+            throw new IllegalStateException("El contrato no puede ser modificado");
+        }
+
+        // Subir foto documento frente
+        String docFrontUrl = null;
+        if (documentFrontBase64 != null && !documentFrontBase64.isEmpty()) {
+            docFrontUrl = uploadBase64Image(documentFrontBase64, "doc_front_" + contract.getId(), 
+                    FolderType.CONTRACT_DOCUMENTS);
+        }
+
+        // Subir foto documento reverso
+        String docBackUrl = null;
+        if (documentBackBase64 != null && !documentBackBase64.isEmpty()) {
+            docBackUrl = uploadBase64Image(documentBackBase64, "doc_back_" + contract.getId(), 
+                    FolderType.CONTRACT_DOCUMENTS);
+        }
+
+        // Subir foto licencia frente
+        String licenseFrontUrl = null;
+        if (licenseFrontBase64 != null && !licenseFrontBase64.isEmpty()) {
+            licenseFrontUrl = uploadBase64Image(licenseFrontBase64, "license_front_" + contract.getId(), 
+                    FolderType.CONTRACT_DOCUMENTS);
+        }
+
+        // Subir foto licencia reverso
+        String licenseBackUrl = null;
+        if (licenseBackBase64 != null && !licenseBackBase64.isEmpty()) {
+            licenseBackUrl = uploadBase64Image(licenseBackBase64, "license_back_" + contract.getId(), 
+                    FolderType.CONTRACT_DOCUMENTS);
+        }
+
+        // Actualizar contrato
+        contract.setDocumentType(documentType);
+        contract.setDocumentNumber(documentNumber);
+        contract.setDocumentFrontUrl(docFrontUrl);
+        contract.setDocumentBackUrl(docBackUrl);
+        contract.setLicenseFrontUrl(licenseFrontUrl);
+        contract.setLicenseBackUrl(licenseBackUrl);
+
+        return contractRepository.save(contract);
+    }
+
     @lombok.Data
     @lombok.NoArgsConstructor
     @lombok.AllArgsConstructor
