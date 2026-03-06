@@ -137,6 +137,13 @@ public class CustomerListView extends VerticalLayout {
         grid = new Grid<>(CustomerDTO.class, false);
         grid.setSizeFull();
         
+        // Columna de Acciones (PRIMERA - FIJA)
+        grid.addComponentColumn(this::createActionButtons)
+            .setHeader("Acciones")
+            .setWidth("150px")
+            .setFlexGrow(0)
+            .setFrozen(true);
+        
         // Columnas
         grid.addColumn(CustomerDTO::getFullName)
             .setHeader("Nombre Completo")
@@ -175,11 +182,6 @@ public class CustomerListView extends VerticalLayout {
         grid.addComponentColumn(customer -> createStatusBadge(customer.getActive()))
             .setHeader("Estado")
             .setWidth("100px")
-            .setFlexGrow(0);
-        
-        grid.addComponentColumn(this::createActionButtons)
-            .setHeader("Acciones")
-            .setWidth("200px")
             .setFlexGrow(0);
         
         // Estilo

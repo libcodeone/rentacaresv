@@ -75,26 +75,50 @@ public class Contract {
     private String documentNumber;
 
     /**
-     * URL de la foto del documento (frente)
+     * URL de la foto del documento de identidad (frente)
      */
     @Column(name = "document_front_url", length = 500)
     private String documentFrontUrl;
 
     /**
-     * URL de la foto del documento (reverso, opcional)
+     * URL de la foto del documento de identidad (reverso)
      */
     @Column(name = "document_back_url", length = 500)
     private String documentBackUrl;
+
+    /**
+     * URL de la foto de licencia de conducir (frente)
+     */
+    @Column(name = "license_front_url", length = 500)
+    private String licenseFrontUrl;
+
+    /**
+     * URL de la foto de licencia de conducir (reverso)
+     */
+    @Column(name = "license_back_url", length = 500)
+    private String licenseBackUrl;
 
     // ========================================
     // Información de la firma
     // ========================================
 
     /**
-     * URL de la imagen de la firma digital
+     * URL de la imagen de la firma digital del cliente
      */
     @Column(name = "signature_url", length = 500)
     private String signatureUrl;
+
+    /**
+     * URL de la imagen de la firma del empleado que entrega
+     */
+    @Column(name = "employee_signature_url", length = 500)
+    private String employeeSignatureUrl;
+
+    /**
+     * Nombre del empleado que entrega el vehículo
+     */
+    @Column(name = "employee_name", length = 200)
+    private String employeeName;
 
     /**
      * Fecha y hora de la firma

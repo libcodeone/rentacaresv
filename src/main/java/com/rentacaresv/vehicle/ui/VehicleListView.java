@@ -139,6 +139,13 @@ public class VehicleListView extends VerticalLayout {
         grid = new Grid<>(VehicleDTO.class, false);
         grid.setSizeFull();
         
+        // Columna de Acciones (PRIMERA - FIJA)
+        grid.addComponentColumn(this::createActionButtons)
+            .setHeader("Acciones")
+            .setWidth("120px")
+            .setFlexGrow(0)
+            .setFrozen(true);
+        
         // Columna de Foto
         grid.addComponentColumn(this::createThumbnail)
             .setHeader("Foto")
@@ -177,11 +184,6 @@ public class VehicleListView extends VerticalLayout {
         
         grid.addComponentColumn(vehicle -> createStatusBadge(vehicle.getStatus()))
             .setHeader("Estado")
-            .setWidth("150px")
-            .setFlexGrow(0);
-        
-        grid.addComponentColumn(this::createActionButtons)
-            .setHeader("Acciones")
             .setWidth("150px")
             .setFlexGrow(0);
         

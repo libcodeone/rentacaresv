@@ -237,7 +237,8 @@ public class ContractPdfGenerator {
         addCell(table, "Depósito:", deposit, 1);
         String accDeductible = contract.getAccidentDeductible() != null ? "$" + contract.getAccidentDeductible() : "-";
         addCell(table, "Ded. Accidente:", accDeductible, 1);
-        String theftDeductible = contract.getTheftDeductible() != null ? "$" + contract.getTheftDeductible() : "-";
+        // Deducible por robo como porcentaje del valor del vehículo
+        String theftDeductible = vehicle.getTheftDeductiblePercentage() + "% del valor";
         addCell(table, "Ded. Robo:", theftDeductible, 1);
 
         document.add(table);
@@ -431,11 +432,6 @@ public class ContractPdfGenerator {
             }
             
             document.add(damageTable);
-        } else {
-            document.add(new Paragraph("✓ Sin daños registrados - Vehículo en buen estado")
-                    .setFontSize(FONT_SMALL)
-                    .setFontColor(SUCCESS_COLOR)
-                    .setMarginTop(5));
         }
         
         document.add(new Paragraph().setMarginBottom(8));
@@ -449,11 +445,11 @@ public class ContractPdfGenerator {
 
         List<String> terms = List.of(
             "El arrendatario se compromete a devolver el vehículo en las mismas condiciones en que lo recibió.",
-            "Entregar lavado el vehículo, de lo contrario se cobrará $5.00 extra.",
+            "Entregar lavado el vehículo, de lo contrario se cobrará entre $5 a $15 dependiendo de cómo se entregue de sucio.",
             "Manchas o derrame de líquido en tapicería: $20.00.",
             "El arrendatario es responsable de cualquier daño o pérdida del vehículo durante el período de renta.",
             "En caso de accidente, el arrendatario participará con el deducible establecido en este contrato.",
-            "En caso de robo, aplicará el deducible por robo acordado.",
+            "En caso de robo, aplicará el deducible por robo acordado (porcentaje del valor del vehículo).",
             "El vehículo no puede salir del país sin autorización previa por escrito.",
             "Está prohibido fumar dentro del vehículo."
         );
@@ -531,10 +527,31 @@ public class ContractPdfGenerator {
         // ===== FIRMA EMPLEADO =====
         Cell employeeCell = new Cell().setBorder(Border.NO_BORDER).setTextAlignment(TextAlignment.CENTER)
                 .setPaddingLeft(30).setPaddingRight(30);
-        employeeCell.add(new Paragraph().setMarginTop(70));
+        
+        // Agregar imagen de firma del empleado si existe
+        if (contract.getEmployeeSignatureUrl() != null && !contract.getEmployeeSignatureUrl().isEmpty()) {
+            try {
+                ImageData employeeSignatureData = ImageDataFactory.create(new URL(contract.getEmployeeSignatureUrl()));
+                Image employeeSignatureImg = new Image(employeeSignatureData);
+                employeeSignatureImg.setMaxHeight(70);
+                employeeSignatureImg.setMaxWidth(180);
+                employeeSignatureImg.setHorizontalAlignment(HorizontalAlignment.CENTER);
+                employeeCell.add(employeeSignatureImg);
+            } catch (Exception e) {
+                log.warn("No se pudo cargar la firma del empleado: {}", e.getMessage());
+                employeeCell.add(new Paragraph().setMarginTop(50));
+            }
+        } else {
+            employeeCell.add(new Paragraph().setMarginTop(50));
+        }
+        
         employeeCell.add(new Paragraph("_______________________________").setFontSize(FONT_SMALL));
         employeeCell.add(new Paragraph("EMPLEADO").setBold().setFontSize(FONT_SMALL));
-        employeeCell.add(new Paragraph(settingsCache.getCompanyName()).setFontSize(FONT_SMALL));
+        
+        // Nombre del empleado si existe, sino nombre de la empresa
+        String employeeName = contract.getEmployeeName() != null && !contract.getEmployeeName().isEmpty() 
+                ? contract.getEmployeeName() : settingsCache.getCompanyName();
+        employeeCell.add(new Paragraph(employeeName).setFontSize(FONT_SMALL));
         table.addCell(employeeCell);
 
         document.add(table);

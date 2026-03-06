@@ -184,6 +184,14 @@ public class RentalListView extends VerticalLayout {
         grid = new Grid<>(RentalDTO.class, false);
         grid.setSizeFull();
 
+        // Acciones (PRIMERA - FIJA, no ordenable)
+        grid.addComponentColumn(this::createActionButtons)
+                .setHeader("Acciones")
+                .setWidth("180px")
+                .setFlexGrow(0)
+                .setFrozen(true)
+                .setSortable(false);
+
         // # - Número de contrato (sin prefijo RENT-)
         grid.addColumn(rental -> formatContractNumber(rental.getContractNumber()))
                 .setHeader("#")
@@ -246,13 +254,6 @@ public class RentalListView extends VerticalLayout {
                 .setAutoWidth(true)
                 .setFlexGrow(1)
                 .setSortable(true);
-
-        // Acciones (no ordenable)
-        grid.addComponentColumn(this::createActionButtons)
-                .setHeader("Acciones")
-                .setAutoWidth(true)
-                .setFlexGrow(1)
-                .setSortable(false);
 
         grid.getStyle()
                 .set("border", "1px solid var(--lumo-contrast-10pct)")
