@@ -31,15 +31,16 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.RolesAllowed;
 import lombok.extern.slf4j.Slf4j;
+import org.vaadin.lineawesome.LineAwesomeIconUrl;
 
 import java.util.*;
 
 /**
  * Vista para gestión de roles y permisos del sistema
  */
-@Route(value = "security/roles", layout = MainLayout.class)
+@Route(value = "settings/roles", layout = MainLayout.class)
 @PageTitle("Roles y Permisos | RentaCarESV")
-@Menu(order = 90, icon = "vaadin:key")
+@Menu(order = 99.1, icon = LineAwesomeIconUrl.USER_SHIELD_SOLID)
 @RolesAllowed("ADMIN")
 @Slf4j
 public class RolesPermissionsView extends VerticalLayout {
