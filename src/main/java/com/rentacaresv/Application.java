@@ -8,6 +8,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * The entry point of the Spring Boot application.
@@ -16,6 +17,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
 @org.springframework.boot.persistence.autoconfigure.EntityScan(basePackages = "com.rentacaresv")
 @EnableJpaRepositories(basePackages = "com.rentacaresv")
 @EnableAsync
+@EnableScheduling
 @StyleSheet(Lumo.STYLESHEET)
 @StyleSheet("styles.css")
 @Theme(value = "rentacaresv")
