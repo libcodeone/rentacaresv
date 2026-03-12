@@ -28,6 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.vaadin.lineawesome.LineAwesomeIconUrl;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -39,9 +40,9 @@ import java.util.Locale;
 /**
  * Vista para visualizar el registro de accesos al sistema
  */
-@Route(value = "security/access-log", layout = MainLayout.class)
+@Route(value = "settings/access-log", layout = MainLayout.class)
 @PageTitle("Registro de Accesos | RentaCarESV")
-@Menu(order = 91, icon = "vaadin:eye")
+@Menu(order = 99.2, icon = LineAwesomeIconUrl.CLIPBOARD_LIST_SOLID)
 @RolesAllowed("ADMIN")
 @Slf4j
 public class AccessLogView extends VerticalLayout {
