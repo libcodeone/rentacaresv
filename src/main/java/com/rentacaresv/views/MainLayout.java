@@ -148,13 +148,66 @@ public class MainLayout extends AppLayout implements AfterNavigationObserver {
         SideNav nav = new SideNav();
 
         List<MenuEntry> menuEntries = MenuConfiguration.getMenuEntries();
-        menuEntries.forEach(entry -> {
-            if (entry.icon() != null) {
-                nav.addItem(new SideNavItem(entry.title(), entry.path(), new SvgIcon(entry.icon())));
-            } else {
-                nav.addItem(new SideNavItem(entry.title(), entry.path()));
+        
+        // Crear submenú de configuración
+        SideNavItem settingsParent = null;
+        
+        for (MenuEntry entry : menuEntries) {
+            String path = entry.path();
+            
+            // Agrupar vistas bajo settings/ en un submenú
+            if (path.startsWith("settings/") && !path.equals("settings")) {
+                // Si es la primera vez, crear el padre
+                if (settingsParent == null) {
+                    // Buscar la entrada principal de settings
+                    MenuEntry settingsEntry = menuEntries.stream()
+                            .filter(e -> e.path().equals("settings"))
+                            .findFirst()
+                            .orElse(null);
+                    
+                    if (settingsEntry != null && settingsEntry.icon() != null) {
+                        settingsParent = new SideNavItem("Configuración");
+                        settingsParent.setPrefixComponent(new SvgIcon(settingsEntry.icon()));
+                        // Agregar la vista principal de settings como hijo
+                        SideNavItem mainSettings = new SideNavItem("Sistema", "settings", VaadinIcon.COG.create());
+                        settingsParent.addItem(mainSettings);
+                        nav.addItem(settingsParent);
+                    }
+                }
+                
+                // Agregar como hijo del submenú
+                if (settingsParent != null) {
+                    SideNavItem childItem;
+                    if (entry.icon() != null) {
+                        childItem = new SideNavItem(entry.title(), path, new SvgIcon(entry.icon()));
+                    } else {
+                        childItem = new SideNavItem(entry.title(), path);
+                    }
+                    settingsParent.addItem(childItem);
+                }
+            } else if (!path.equals("settings")) {
+                // Vistas normales (no settings)
+                if (entry.icon() != null) {
+                    nav.addItem(new SideNavItem(entry.title(), path, new SvgIcon(entry.icon())));
+                } else {
+                    nav.addItem(new SideNavItem(entry.title(), path));
+                }
             }
-        });
+        }
+        
+        // Si no se encontraron subitems de settings, agregar settings normal
+        if (settingsParent == null) {
+            menuEntries.stream()
+                    .filter(e -> e.path().equals("settings"))
+                    .findFirst()
+                    .ifPresent(entry -> {
+                        if (entry.icon() != null) {
+                            nav.addItem(new SideNavItem(entry.title(), entry.path(), new SvgIcon(entry.icon())));
+                        } else {
+                            nav.addItem(new SideNavItem(entry.title(), entry.path()));
+                        }
+                    });
+        }
 
         return nav;
     }
