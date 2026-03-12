@@ -403,10 +403,18 @@ public class ContractService {
     public Contract generateAndSavePdf(Contract contract) {
         try {
             log.info("Generando PDF para contrato ID: {}", contract.getId());
+            log.info("URL firma cliente: {}", contract.getSignatureUrl());
+            log.info("URL firma empleado: {}", contract.getEmployeeSignatureUrl());
+
+            // Forzar flush para asegurar que los datos están en BD
+            contractRepository.flush();
 
             // Recargar el contrato con todas las relaciones para evitar LazyInitializationException
             Contract fullContract = findByIdWithRelations(contract.getId())
                     .orElseThrow(() -> new IllegalArgumentException("Contrato no encontrado"));
+            
+            log.info("Después de recargar - URL firma cliente: {}", fullContract.getSignatureUrl());
+            log.info("Después de recargar - URL firma empleado: {}", fullContract.getEmployeeSignatureUrl());
 
             // Generar PDF
             byte[] pdfBytes = pdfGenerator.generatePdf(fullContract);
@@ -636,6 +644,80 @@ public class ContractService {
 
         return contractRepository.save(contract);
     }
+
+    // ========================================
+    // Subir video del vehículo
+    // ========================================
+
+    /**
+     * Sube el video del estado del vehículo (entrega)
+     */
+    @Transactional
+    public Contract uploadVehicleVideo(String token, InputStream videoStream, String fileName, String contentType) {
+        Contract contract = findByToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("Contrato no encontrado"));
+
+        if (!contract.canBeAccessed()) {
+            throw new IllegalStateException("El contrato no puede ser modificado");
+        }
+
+        log.info("📹 Subiendo video del vehículo para contrato ID: {}", contract.getId());
+
+        try {
+            String videoUrl = fileStorageService.uploadFile(
+                    videoStream,
+                    "video_entrega_" + contract.getId() + "_" + fileName,
+                    contentType,
+                    FolderType.CONTRACT_VIDEOS,
+                    null
+            );
+
+            contract.setVehicleVideoUrl(videoUrl);
+            contract = contractRepository.save(contract);
+
+            log.info("✅ Video subido exitosamente: {}", videoUrl);
+            return contract;
+
+        } catch (Exception e) {
+            log.error("❌ Error subiendo video: {}", e.getMessage(), e);
+            throw new RuntimeException("Error al subir video: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Sube el video del estado del vehículo (devolución)
+     */
+    @Transactional
+    public Contract uploadReturnVideo(Long contractId, InputStream videoStream, String fileName, String contentType) {
+        Contract contract = contractRepository.findById(contractId)
+                .orElseThrow(() -> new IllegalArgumentException("Contrato no encontrado"));
+
+        log.info("📹 Subiendo video de devolución para contrato ID: {}", contract.getId());
+
+        try {
+            String videoUrl = fileStorageService.uploadFile(
+                    videoStream,
+                    "video_devolucion_" + contract.getId() + "_" + fileName,
+                    contentType,
+                    FolderType.CONTRACT_VIDEOS,
+                    null
+            );
+
+            contract.setVehicleReturnVideoUrl(videoUrl);
+            contract = contractRepository.save(contract);
+
+            log.info("✅ Video de devolución subido exitosamente: {}", videoUrl);
+            return contract;
+
+        } catch (Exception e) {
+            log.error("❌ Error subiendo video de devolución: {}", e.getMessage(), e);
+            throw new RuntimeException("Error al subir video: " + e.getMessage(), e);
+        }
+    }
+
+    // ========================================
+    // DTOs internos
+    // ========================================
 
     @lombok.Data
     @lombok.NoArgsConstructor
