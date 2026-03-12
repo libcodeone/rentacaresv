@@ -32,6 +32,9 @@
     padding: var(--lumo-space-m);
     margin-bottom: var(--lumo-space-m);
     page-break-inside: avoid;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
 }
 
 .contract-section h3 {
@@ -40,6 +43,55 @@
     border-bottom: 2px solid var(--lumo-primary-color);
     color: var(--lumo-primary-color);
     font-size: var(--lumo-font-size-l);
+}
+
+/* Forzar que todos los elementos internos ocupen el ancho completo */
+.contract-section > * {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+.contract-section vaadin-form-layout {
+    width: 100% !important;
+}
+
+.contract-section vaadin-horizontal-layout {
+    width: 100% !important;
+}
+
+.contract-section vaadin-vertical-layout {
+    width: 100% !important;
+}
+
+/* Asegurar que los Div internos también ocupen todo el ancho */
+.contract-section > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+/* Contenedor principal del contrato - OVERRIDE para ancho uniforme */
+.contract-main-content {
+    padding-bottom: var(--lumo-space-xl) !important;
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+}
+
+.contract-main-content > * {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex-shrink: 0 !important;
+}
+
+/* Override específico para secciones del contrato */
+.contract-main-content .contract-section {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
 }
 
 /* Grid de accesorios */
@@ -183,11 +235,23 @@
     background: var(--lumo-contrast-5pct);
     border-radius: var(--lumo-border-radius-m);
     margin: var(--lumo-space-s) 0;
+    width: 100% !important;
+    box-sizing: border-box !important;
 }
 
 .signature-box canvas {
     max-width: 100%;
     box-shadow: var(--lumo-box-shadow-s);
+}
+
+/* Firmas - layout horizontal */
+.contract-section vaadin-horizontal-layout[style*="flex-wrap"] {
+    width: 100% !important;
+}
+
+.contract-section vaadin-horizontal-layout[style*="flex-wrap"] > vaadin-vertical-layout {
+    flex: 1 !important;
+    min-width: 280px !important;
 }
 
 /* Estados finales */

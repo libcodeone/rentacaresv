@@ -143,10 +143,22 @@ public class Contract {
     // ========================================
 
     /**
-     * URL del diagrama del vehículo con las marcas de daños
+     * URL del diagrama del vehículo con las marcas de daños (LEGACY - ya no se usa)
      */
     @Column(name = "vehicle_diagram_url", length = 500)
     private String vehicleDiagramUrl;
+
+    /**
+     * URL del video del estado del vehículo al momento de la entrega
+     */
+    @Column(name = "vehicle_video_url", length = 500)
+    private String vehicleVideoUrl;
+
+    /**
+     * URL del video del estado del vehículo al momento de la devolución
+     */
+    @Column(name = "vehicle_return_video_url", length = 500)
+    private String vehicleReturnVideoUrl;
 
     // ========================================
     // Información del vehículo al momento del contrato

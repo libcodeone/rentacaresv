@@ -3,7 +3,7 @@ package com.rentacaresv.contract.ui;
 import com.rentacaresv.contract.application.ContractService;
 import com.rentacaresv.contract.domain.*;
 import com.rentacaresv.settings.application.SettingsCache;
-import com.vaadin.flow.component.ClientCallable;
+
 import com.vaadin.flow.component.Html;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
@@ -29,7 +29,7 @@ import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
 import com.vaadin.flow.router.*;
 import com.vaadin.flow.server.VaadinRequest;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
-import elemental.json.JsonObject;
+
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.InputStream;
@@ -45,7 +45,7 @@ import java.util.stream.Collectors;
  * - Fotos de documentos (licencia frente/reverso, DUI/pasaporte frente/reverso)
  * - Datos del vehículo
  * - Revisión de accesorios con selección rápida
- * - Diagrama de daños
+ * - Video del estado del vehículo
  * - Términos y condiciones
  * - Dos firmas (cliente y empleado) con validación de canvas
  */
@@ -101,8 +101,8 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
     // Accesorios
     private Map<Long, Checkbox> accessoryCheckboxes = new HashMap<>();
 
-    // Daños
-    private List<ContractService.ContractDamageMarkDTO> damageMarks = new ArrayList<>();
+    // Video del vehículo
+    private String vehicleVideoUrl;
 
     // Firmas (cliente y empleado)
     private String clientSignatureBase64;
@@ -185,7 +185,7 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         mainContent.add(createPaymentSection());
         mainContent.add(createAccessoriesSection());
         mainContent.add(createPhysicalReviewSection());
-        mainContent.add(createDamageSection());
+        mainContent.add(createVideoSection());
         mainContent.add(createTermsSection());
         mainContent.add(createSignatureSection());
 
@@ -223,6 +223,7 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
                 .set("flex-wrap", "wrap")
                 .set("gap", "var(--lumo-space-m)");
 
+        // Lado izquierdo: Logo + Nombre
         HorizontalLayout leftSide = new HorizontalLayout();
         leftSide.setAlignItems(FlexComponent.Alignment.CENTER);
         leftSide.setSpacing(true);
@@ -252,11 +253,14 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
                 .set("white-space", "nowrap");
         leftSide.add(title);
 
-        VerticalLayout rightSide = new VerticalLayout();
-        rightSide.setPadding(false);
-        rightSide.setSpacing(false);
-        rightSide.setAlignItems(FlexComponent.Alignment.END);
-        rightSide.getStyle().set("min-width", "200px");
+        // Lado derecho: # Contrato + Período (usando Div para mejor control)
+        Div rightSide = new Div();
+        rightSide.getStyle()
+                .set("display", "flex")
+                .set("flex-direction", "column")
+                .set("align-items", "flex-end")
+                .set("justify-content", "center")
+                .set("min-width", "200px");
 
         Span contractNum = new Span("Contrato #: " + contract.getRental().getContractNumber());
         contractNum.getStyle()
@@ -748,214 +752,163 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
     }
 
     // ========================================
-    // SECCIÓN: Diagrama de Daños
+    // SECCIÓN: Video del Estado del Vehículo
     // ========================================
 
-    private Div createDamageSection() {
-        Div section = createSection("ESTADO DEL VEHÍCULO - DIAGRAMA DE DAÑOS");
+    private Div createVideoSection() {
+        Div section = createSection("ESTADO DEL VEHÍCULO - VIDEO");
 
         Paragraph instruction = new Paragraph(
-                "Haga clic en el diagrama para marcar los daños existentes del vehículo.");
+                "Grabe o adjunte un video mostrando el estado actual del vehículo. " +
+                "El video servirá como evidencia del estado al momento de la entrega.");
         instruction.getStyle().set("color", "var(--lumo-secondary-text-color)");
         section.add(instruction);
 
-        Div legend = createDamageLegend();
-        section.add(legend);
-
-        var vehicle = contract.getRental().getVehicle();
-        var vehicleType = vehicle.getVehicleType();
-
-        if (vehicleType == null) {
-            vehicleType = com.rentacaresv.vehicle.domain.VehicleType.SEDAN;
-        }
-
-        Optional<VehicleDiagram> diagramOpt = contractService.getDiagramForVehicleType(vehicleType);
-
-        Div diagramContainer = new Div();
-        diagramContainer.addClassName("damage-diagram-container");
-        diagramContainer.setId("damage-diagram");
-        diagramContainer.getStyle()
-                .set("position", "relative")
-                .set("width", "100%")
-                .set("max-width", "800px")
-                .set("margin", "0 auto")
-                .set("background", "var(--lumo-contrast-5pct)")
+        // Info box con instrucciones
+        Div infoBox = new Div();
+        infoBox.getStyle()
+                .set("background", "linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%)")
+                .set("border", "1px solid #64B5F6")
                 .set("border-radius", "var(--lumo-border-radius-m)")
-                .set("min-height", "300px");
+                .set("padding", "var(--lumo-space-m)")
+                .set("margin-bottom", "var(--lumo-space-m)");
+        
+        infoBox.add(new Html(
+                "<div style='font-size: var(--lumo-font-size-s);'>" +
+                "<strong>🎥 Instrucciones para grabar el video:</strong>" +
+                "<ul style='margin: var(--lumo-space-xs) 0; padding-left: var(--lumo-space-l);'>" +
+                "<li>Grabe un video de <strong>30-60 segundos</strong> mostrando el exterior e interior del vehículo</li>" +
+                "<li>Incluya todos los lados del vehículo (frente, lados, trasera)</li>" +
+                "<li>Muestre el estado del interior (asientos, tablero, piso)</li>" +
+                "<li>Si hay daños existentes, enfóquelos claramente</li>" +
+                "<li>Formatos aceptados: MP4, MOV, WebM (máximo 100MB)</li>" +
+                "</ul></div>"));
+        section.add(infoBox);
 
-        if (diagramOpt.isPresent()) {
-            VehicleDiagram diagram = diagramOpt.get();
-            String diagramUrl = diagram.getDiagramUrl();
+        if (isReadOnly) {
+            // Modo lectura: mostrar el video si existe
+            if (contract.getVehicleVideoUrl() != null && !contract.getVehicleVideoUrl().isEmpty()) {
+                Div videoContainer = new Div();
+                videoContainer.getStyle()
+                        .set("text-align", "center")
+                        .set("margin", "var(--lumo-space-m) 0");
 
-            if (diagramUrl != null && !diagramUrl.isEmpty()) {
-                Image diagramImg = new Image(diagramUrl, "Diagrama del vehículo");
-                diagramImg.setWidthFull();
-                diagramImg.getStyle()
-                        .set("display", "block")
-                        .set("max-width", "100%")
-                        .set("height", "auto");
-                diagramContainer.add(diagramImg);
-            } else if (diagram.getSvgContent() != null && !diagram.getSvgContent().isEmpty()) {
-                Html svg = new Html("<div class='svg-wrapper'>" + diagram.getSvgContent() + "</div>");
-                diagramContainer.add(svg);
+                Html video = new Html(
+                        "<video controls style='max-width: 100%; max-height: 400px; border-radius: 8px;'>" +
+                        "<source src='" + contract.getVehicleVideoUrl() + "' type='video/mp4'>" +
+                        "Su navegador no soporta el elemento de video." +
+                        "</video>");
+                videoContainer.add(video);
+
+                Anchor downloadLink = new Anchor(contract.getVehicleVideoUrl(), "Descargar video");
+                downloadLink.getElement().setAttribute("download", "");
+                downloadLink.getElement().setAttribute("target", "_blank");
+                downloadLink.getStyle().set("display", "block").set("margin-top", "var(--lumo-space-s)");
+
+                section.add(videoContainer, downloadLink);
             } else {
-                diagramContainer.add(new Paragraph("Imagen de diagrama no configurada para este tipo de vehículo"));
-            }
-
-            if (!isReadOnly) {
-                diagramContainer.getElement().executeJs(
-                        "this.addEventListener('click', (e) => {" +
-                                "  const rect = this.getBoundingClientRect();" +
-                                "  const x = ((e.clientX - rect.left) / rect.width * 100).toFixed(2);" +
-                                "  const y = ((e.clientY - rect.top) / rect.height * 100).toFixed(2);" +
-                                "  $0.$server.addDamageMark(x, y);" +
-                                "});",
-                        getElement());
+                section.add(new Paragraph("No se subió video del vehículo."));
             }
         } else {
-            diagramContainer.add(new Paragraph("Diagrama no disponible para este tipo de vehículo."));
+            // Modo edición: permitir subir video
+            Div uploadContainer = new Div();
+            uploadContainer.getStyle()
+                    .set("border", "2px dashed var(--lumo-contrast-30pct)")
+                    .set("border-radius", "var(--lumo-border-radius-m)")
+                    .set("padding", "var(--lumo-space-l)")
+                    .set("text-align", "center")
+                    .set("background", "var(--lumo-contrast-5pct)");
+
+            // Preview container
+            Div previewContainer = new Div();
+            previewContainer.setId("video-preview");
+            previewContainer.getStyle().set("margin-bottom", "var(--lumo-space-m)");
+
+            Span placeholderIcon = new Span("🎥");
+            placeholderIcon.getStyle().set("font-size", "3em");
+            
+            Paragraph placeholderText = new Paragraph("Arrastra un video aquí o haz clic para seleccionar");
+            placeholderText.getStyle().set("color", "var(--lumo-secondary-text-color)");
+
+            previewContainer.add(placeholderIcon, placeholderText);
+
+            // Upload component
+            MemoryBuffer buffer = new MemoryBuffer();
+            Upload upload = new Upload(buffer);
+            upload.setAcceptedFileTypes("video/mp4", "video/quicktime", "video/webm", "video/x-msvideo");
+            upload.setMaxFiles(1);
+            upload.setMaxFileSize(100 * 1024 * 1024); // 100MB
+
+            Button uploadButton = new Button("Seleccionar Video", VaadinIcon.UPLOAD.create());
+            uploadButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+            upload.setUploadButton(uploadButton);
+
+            Span dropLabel = new Span("o arrastra el archivo aquí");
+            dropLabel.getStyle().set("color", "var(--lumo-secondary-text-color)");
+            upload.setDropLabel(dropLabel);
+
+            // Status display
+            Div statusDiv = new Div();
+            statusDiv.setId("upload-status");
+            statusDiv.getStyle().set("margin-top", "var(--lumo-space-m)");
+
+            upload.addSucceededListener(event -> {
+                try {
+                    String fileName = event.getFileName();
+                    String mimeType = event.getMIMEType();
+                    InputStream inputStream = buffer.getInputStream();
+
+                    // Subir el video directamente al servicio
+                    contractService.uploadVehicleVideo(token, inputStream, fileName, mimeType);
+
+                    // Actualizar UI
+                    previewContainer.removeAll();
+                    Span successIcon = new Span("✅");
+                    successIcon.getStyle().set("font-size", "2em");
+                    Paragraph successText = new Paragraph("Video subido: " + fileName);
+                    successText.getStyle().set("color", "var(--lumo-success-color)");
+                    previewContainer.add(successIcon, successText);
+
+                    vehicleVideoUrl = "uploaded"; // Marcar como subido
+
+                    Notification.show("✅ Video subido exitosamente", 3000, Notification.Position.TOP_CENTER)
+                            .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+
+                } catch (Exception e) {
+                    log.error("Error subiendo video: {}", e.getMessage(), e);
+                    Notification.show("Error al subir video: " + e.getMessage(), 5000, Notification.Position.MIDDLE)
+                            .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                }
+            });
+
+            upload.addFileRejectedListener(event -> {
+                Notification.show("Archivo rechazado: " + event.getErrorMessage(), 4000, Notification.Position.MIDDLE)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+            });
+
+            upload.addFailedListener(event -> {
+                Notification.show("Error al cargar: " + event.getReason().getMessage(), 4000, Notification.Position.MIDDLE)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+            });
+
+            uploadContainer.add(previewContainer, upload, statusDiv);
+            section.add(uploadContainer);
+
+            // Nota importante
+            Div noteBox = new Div();
+            noteBox.getStyle()
+                    .set("background", "var(--lumo-contrast-5pct)")
+                    .set("padding", "var(--lumo-space-s)")
+                    .set("border-radius", "var(--lumo-border-radius-m)")
+                    .set("margin-top", "var(--lumo-space-m)")
+                    .set("font-size", "var(--lumo-font-size-s)");
+            noteBox.add(new Html(
+                    "<div><strong>⚠️ Importante:</strong> El video es evidencia del estado del vehículo al momento de la entrega. " +
+                    "Asegúrese de que el video muestre claramente cualquier daño preexistente.</div>"));
+            section.add(noteBox);
         }
-
-        section.add(diagramContainer);
-
-        Div damageList = new Div();
-        damageList.setId("damage-list");
-        damageList.addClassName("damage-list");
-        updateDamageList(damageList);
-        section.add(damageList);
 
         return section;
-    }
-
-    @ClientCallable
-    public void addDamageMark(String x, String y) {
-        if (isReadOnly)
-            return;
-
-        Dialog dialog = new Dialog();
-        dialog.setHeaderTitle("Agregar Daño");
-
-        ComboBox<DamageType> typeCombo = new ComboBox<>("Tipo de Daño");
-        typeCombo.setItems(DamageType.values());
-        typeCombo.setItemLabelGenerator(DamageType::getLabel);
-        typeCombo.setWidthFull();
-
-        TextArea descArea = new TextArea("Descripción");
-        descArea.setWidthFull();
-
-        Button saveBtn = new Button("Guardar", e -> {
-            if (typeCombo.getValue() == null) {
-                Notification.show("Seleccione un tipo de daño", 2000, Notification.Position.MIDDLE);
-                return;
-            }
-
-            ContractService.ContractDamageMarkDTO mark = new ContractService.ContractDamageMarkDTO();
-            mark.setPositionX(new BigDecimal(x));
-            mark.setPositionY(new BigDecimal(y));
-            mark.setDamageType(typeCombo.getValue());
-            mark.setDescription(descArea.getValue());
-            mark.setSeverity(1);
-
-            damageMarks.add(mark);
-
-            Div damageList = (Div) mainContent.getChildren()
-                    .flatMap(c -> {
-                        if (c instanceof Div div) {
-                            return div.getChildren();
-                        }
-                        return java.util.stream.Stream.empty();
-                    })
-                    .filter(c -> c.getId().orElse("").equals("damage-list"))
-                    .findFirst().orElse(null);
-
-            if (damageList != null) {
-                updateDamageList(damageList);
-            }
-
-            addVisualMarker(x, y, typeCombo.getValue());
-            dialog.close();
-        });
-        saveBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
-        Button cancelBtn = new Button("Cancelar", e -> dialog.close());
-
-        HorizontalLayout btns = new HorizontalLayout(saveBtn, cancelBtn);
-        dialog.add(typeCombo, descArea, btns);
-        dialog.open();
-    }
-
-    private void addVisualMarker(String x, String y, DamageType type) {
-        UI.getCurrent().getPage().executeJs(
-                "const container = document.getElementById('damage-diagram');" +
-                        "const marker = document.createElement('div');" +
-                        "marker.className = 'damage-marker';" +
-                        "marker.style.left = $0 + '%';" +
-                        "marker.style.top = $1 + '%';" +
-                        "marker.style.backgroundColor = $2;" +
-                        "marker.textContent = $3;" +
-                        "marker.title = $4;" +
-                        "container.appendChild(marker);",
-                x, y, type.getColor(), type.getSymbol(), type.getLabel());
-    }
-
-    private void updateDamageList(Div container) {
-        container.removeAll();
-
-        if (damageMarks.isEmpty()) {
-            container.add(new Paragraph("No se han marcado daños."));
-            return;
-        }
-
-        H4 listTitle = new H4("Daños marcados (" + damageMarks.size() + "):");
-        container.add(listTitle);
-
-        for (int i = 0; i < damageMarks.size(); i++) {
-            var mark = damageMarks.get(i);
-            int index = i;
-
-            HorizontalLayout row = new HorizontalLayout();
-            row.setAlignItems(FlexComponent.Alignment.CENTER);
-
-            Span typeSpan = new Span(mark.getDamageType().getLabel());
-            typeSpan.getStyle().set("color", mark.getDamageType().getColor()).set("font-weight", "bold");
-
-            Span descSpan = new Span(mark.getDescription() != null ? mark.getDescription() : "Sin descripción");
-
-            if (!isReadOnly) {
-                Button removeBtn = new Button(VaadinIcon.TRASH.create());
-                removeBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_ERROR,
-                        ButtonVariant.LUMO_TERTIARY);
-                removeBtn.addClickListener(e -> {
-                    damageMarks.remove(index);
-                    updateDamageList(container);
-                });
-                row.add(typeSpan, descSpan, removeBtn);
-            } else {
-                row.add(typeSpan, descSpan);
-            }
-
-            container.add(row);
-        }
-    }
-
-    private Div createDamageLegend() {
-        Div legend = new Div();
-        legend.addClassName("damage-legend");
-
-        for (DamageType type : DamageType.values()) {
-            Span item = new Span();
-            item.addClassName("legend-item");
-
-            Span color = new Span(type.getSymbol());
-            color.addClassName("legend-color");
-            color.getStyle().set("background-color", type.getColor());
-
-            Span label = new Span(type.getLabel());
-            item.add(color, label);
-            legend.add(item);
-        }
-
-        return legend;
     }
 
     // ========================================
@@ -1010,13 +963,15 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         HorizontalLayout signaturesRow = new HorizontalLayout();
         signaturesRow.setWidthFull();
         signaturesRow.setSpacing(true);
-        signaturesRow.getStyle().set("flex-wrap", "wrap");
+        signaturesRow.getStyle()
+                .set("flex-wrap", "wrap")
+                .set("gap", "var(--lumo-space-m)")
+                .set("justify-content", "space-around");
 
         // ===== FIRMA DEL CLIENTE =====
         VerticalLayout clientSignature = new VerticalLayout();
         clientSignature.setAlignItems(FlexComponent.Alignment.CENTER);
-        clientSignature.setWidth("50%");
-        clientSignature.setMinWidth("300px");
+        clientSignature.getStyle().set("flex", "1").set("min-width", "280px");
         clientSignature.setPadding(false);
 
         Paragraph clientLabel = new Paragraph("FIRMA DEL CLIENTE");
@@ -1032,6 +987,13 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
             clientName.getStyle().set("font-size", "var(--lumo-font-size-s)");
             clientSignature.add(clientName);
         } else if (!isReadOnly) {
+            // Campo de nombre del cliente (solo lectura para alinear con el del empleado)
+            TextField clientNameField = new TextField("Nombre del Cliente");
+            clientNameField.setValue(contract.getRental().getCustomer().getFullName());
+            clientNameField.setReadOnly(true);
+            clientNameField.setWidthFull();
+            clientNameField.setMaxWidth("350px");
+
             Div signatureContainer = new Div();
             signatureContainer.setId("client-signature-container");
             signatureContainer.addClassName("signature-box");
@@ -1051,7 +1013,7 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
                 clientSignatureBase64 = null;
             });
 
-            clientSignature.add(clientLabel, signatureContainer, clearBtn);
+            clientSignature.add(clientLabel, clientNameField, signatureContainer, clearBtn);
         } else {
             Div placeholder = new Div();
             placeholder.getStyle()
@@ -1064,8 +1026,7 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         // ===== FIRMA DEL EMPLEADO =====
         VerticalLayout employeeSignature = new VerticalLayout();
         employeeSignature.setAlignItems(FlexComponent.Alignment.CENTER);
-        employeeSignature.setWidth("50%");
-        employeeSignature.setMinWidth("300px");
+        employeeSignature.getStyle().set("flex", "1").set("min-width", "280px");
         employeeSignature.setPadding(false);
 
         Paragraph employeeLabel = new Paragraph("FIRMA DEL EMPLEADO");
@@ -1174,68 +1135,8 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
                     return;
                 }
 
-                // Validar que ambos canvas tengan firma
-                UI.getCurrent().getPage().executeJs(
-                        "function isCanvasEmpty(canvasId) {" +
-                                "  const canvas = document.getElementById(canvasId);" +
-                                "  if (!canvas) return true;" +
-                                "  const ctx = canvas.getContext('2d');" +
-                                "  const pixelData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;" +
-                                "  for (let i = 3; i < pixelData.length; i += 4) {" +
-                                "    if (pixelData[i] !== 0) return false;" +
-                                "  }" +
-                                "  return true;" +
-                                "}" +
-                                "return {" +
-                                "  clientEmpty: isCanvasEmpty('client-signature-canvas')," +
-                                "  employeeEmpty: isCanvasEmpty('employee-signature-canvas')," +
-                                "  clientData: document.getElementById('client-signature-canvas')?.toDataURL('image/png'),"
-                                +
-                                "  employeeData: document.getElementById('employee-signature-canvas')?.toDataURL('image/png')"
-                                +
-                                "};")
-                        .then(json -> {
-                            elemental.json.JsonObject result = (elemental.json.JsonObject) json;
-                            boolean clientEmpty = result.getBoolean("clientEmpty");
-                            boolean employeeEmpty = result.getBoolean("employeeEmpty");
-
-                            if (clientEmpty) {
-                                Notification
-                                        .show("El cliente debe firmar en el área correspondiente", 3000,
-                                                Notification.Position.MIDDLE)
-                                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
-                                return;
-                            }
-
-                            if (employeeEmpty) {
-                                Notification
-                                        .show("El empleado debe firmar en el área correspondiente", 3000,
-                                                Notification.Position.MIDDLE)
-                                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
-                                return;
-                            }
-
-                            clientSignatureBase64 = result.get("clientData").asString();
-                            employeeSignatureBase64 = result.get("employeeData").asString();
-
-                            if (clientSignatureBase64 == null || clientSignatureBase64.length() < 1000) {
-                                Notification
-                                        .show("Por favor, el cliente debe dibujar su firma", 3000,
-                                                Notification.Position.MIDDLE)
-                                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
-                                return;
-                            }
-
-                            if (employeeSignatureBase64 == null || employeeSignatureBase64.length() < 1000) {
-                                Notification
-                                        .show("Por favor, el empleado debe dibujar su firma", 3000,
-                                                Notification.Position.MIDDLE)
-                                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
-                                return;
-                            }
-
-                            submitContract();
-                        });
+                // Validar y obtener firmas usando llamadas separadas
+                validateAndSubmitSignatures();
             });
 
             HorizontalLayout signRow = new HorizontalLayout(acceptTerms, signBtn);
@@ -1251,18 +1152,90 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
     }
 
     // ========================================
+    // Validación de firmas
+    // ========================================
+
+    private void validateAndSubmitSignatures() {
+        // Primero verificar si el canvas del cliente está vacío
+        UI.getCurrent().getPage().executeJs(
+                "const canvas = document.getElementById('client-signature-canvas');" +
+                "if (!canvas) return 'NO_CANVAS';" +
+                "const ctx = canvas.getContext('2d');" +
+                "const pixelData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;" +
+                "for (let i = 3; i < pixelData.length; i += 4) {" +
+                "  if (pixelData[i] !== 0) return 'HAS_CONTENT';" +
+                "}" +
+                "return 'EMPTY';")
+        .then(String.class, clientStatus -> {
+            if ("EMPTY".equals(clientStatus) || "NO_CANVAS".equals(clientStatus)) {
+                Notification.show("El cliente debe firmar en el área correspondiente", 3000, Notification.Position.MIDDLE)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                return;
+            }
+            
+            // Verificar si el canvas del empleado está vacío
+            UI.getCurrent().getPage().executeJs(
+                    "const canvas = document.getElementById('employee-signature-canvas');" +
+                    "if (!canvas) return 'NO_CANVAS';" +
+                    "const ctx = canvas.getContext('2d');" +
+                    "const pixelData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;" +
+                    "for (let i = 3; i < pixelData.length; i += 4) {" +
+                    "  if (pixelData[i] !== 0) return 'HAS_CONTENT';" +
+                    "}" +
+                    "return 'EMPTY';")
+            .then(String.class, employeeStatus -> {
+                if ("EMPTY".equals(employeeStatus) || "NO_CANVAS".equals(employeeStatus)) {
+                    Notification.show("El empleado debe firmar en el área correspondiente", 3000, Notification.Position.MIDDLE)
+                            .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                    return;
+                }
+                
+                // Obtener la firma del cliente
+                UI.getCurrent().getPage().executeJs(
+                        "return document.getElementById('client-signature-canvas')?.toDataURL('image/png') || '';")
+                .then(String.class, clientData -> {
+                    if (clientData == null || clientData.length() < 1000) {
+                        Notification.show("Por favor, el cliente debe dibujar su firma", 3000, Notification.Position.MIDDLE)
+                                .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                        return;
+                    }
+                    clientSignatureBase64 = clientData;
+                    
+                    // Obtener la firma del empleado
+                    UI.getCurrent().getPage().executeJs(
+                            "return document.getElementById('employee-signature-canvas')?.toDataURL('image/png') || '';")
+                    .then(String.class, employeeData -> {
+                        if (employeeData == null || employeeData.length() < 1000) {
+                            Notification.show("Por favor, el empleado debe dibujar su firma", 3000, Notification.Position.MIDDLE)
+                                    .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                            return;
+                        }
+                        employeeSignatureBase64 = employeeData;
+                        
+                        // Ambas firmas válidas, proceder a firmar
+                        submitContract();
+                    });
+                });
+            });
+        });
+    }
+
+    // ========================================
     // Métodos auxiliares
     // ========================================
 
     private Div createSection(String title) {
         Div section = new Div();
         section.addClassName("contract-section");
+        section.setWidthFull();
         section.getStyle()
                 .set("background", "white")
                 .set("border", "1px solid var(--lumo-contrast-20pct)")
                 .set("border-radius", "var(--lumo-border-radius-m)")
                 .set("padding", "var(--lumo-space-m)")
-                .set("margin-bottom", "var(--lumo-space-m)");
+                .set("margin-bottom", "var(--lumo-space-m)")
+                .set("width", "100%")
+                .set("box-sizing", "border-box");
 
         H3 sectionTitle = new H3(title);
         sectionTitle.getStyle()
@@ -1326,16 +1299,9 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
             documentNumberField.setValue(contract.getDocumentNumber());
         }
 
-        if (contract.getDamageMarks() != null && !contract.getDamageMarks().isEmpty()) {
-            for (ContractDamageMark mark : contract.getDamageMarks()) {
-                ContractService.ContractDamageMarkDTO dto = new ContractService.ContractDamageMarkDTO();
-                dto.setPositionX(mark.getPositionX());
-                dto.setPositionY(mark.getPositionY());
-                dto.setDamageType(mark.getDamageType());
-                dto.setDescription(mark.getDescription());
-                dto.setSeverity(mark.getSeverity());
-                damageMarks.add(dto);
-            }
+        // Cargar URL del video si existe
+        if (contract.getVehicleVideoUrl() != null) {
+            vehicleVideoUrl = contract.getVehicleVideoUrl();
         }
     }
 
@@ -1393,7 +1359,7 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         }
         contractService.updateAccessories(token, accessoryDTOs);
 
-        contractService.updateDamageMarks(token, damageMarks);
+        // El video ya se sube directamente en el upload, no necesita guardarse aquí
 
         contractService.updateAdditionalInfo(token,
                 deliveryLocationField.getValue(),
