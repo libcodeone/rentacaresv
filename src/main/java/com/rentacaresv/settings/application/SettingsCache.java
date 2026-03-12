@@ -165,4 +165,18 @@ public class SettingsCache {
     public boolean isGoogleCalendarEnabled() {
         return Boolean.TRUE.equals(getSettings().getGoogleCalendarEnabled());
     }
+
+    /**
+     * Obtiene el ID del usuario cuyo calendario es el de la empresa
+     */
+    public Long getCompanyCalendarUserId() {
+        return getSettings().getCompanyCalendarUserId();
+    }
+
+    /**
+     * Verifica si hay un calendario de empresa configurado
+     */
+    public boolean hasCompanyCalendar() {
+        return getSettings().hasCompanyCalendar();
+    }
 }

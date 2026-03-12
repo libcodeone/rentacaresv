@@ -2,9 +2,7 @@ name: Build and Deploy RentaCar ESV
 
 on:
   push:
-    branches: [ main, prod ]
-  pull_request:
-    branches: [ main, prod ]
+    branches: [ main, prod, nova_main ]
   workflow_dispatch:  # Permite ejecución manual
 
 env:
@@ -55,9 +53,9 @@ jobs:
     name: Deploy to Server
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/prod'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/prod' || github.ref == 'refs/heads/nova_main'
     
-    environment: rentacares_main
+    environment: ${{ github.ref == 'refs/heads/nova_main' && 'nova_admin_rentacar' || 'rentacares_main' }}
     
     steps:
       - name: Descargar artefacto JAR

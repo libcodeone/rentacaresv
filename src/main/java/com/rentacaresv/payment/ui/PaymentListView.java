@@ -145,6 +145,13 @@ public class PaymentListView extends VerticalLayout {
         grid = new Grid<>(PaymentDTO.class, false);
         grid.setSizeFull();
         
+        // Columna de Acciones (PRIMERA - FIJA)
+        grid.addComponentColumn(this::createActionButtons)
+            .setHeader("Acciones")
+            .setWidth("100px")
+            .setFlexGrow(0)
+            .setFrozen(true);
+        
         grid.addColumn(PaymentDTO::getPaymentNumber)
             .setHeader("Número")
             .setWidth("150px")
@@ -178,11 +185,6 @@ public class PaymentListView extends VerticalLayout {
         grid.addColumn(PaymentDTO::getCreatedBy)
             .setHeader("Usuario")
             .setWidth("120px")
-            .setFlexGrow(0);
-        
-        grid.addComponentColumn(this::createActionButtons)
-            .setHeader("Acciones")
-            .setWidth("100px")
             .setFlexGrow(0);
         
         grid.addThemeVariants();

@@ -77,6 +77,13 @@ public class Vehicle {
     @Column(name = "price_monthly", nullable = false, precision = 10, scale = 2)
     private BigDecimal priceMonthly;
 
+    /**
+     * Porcentaje de deducible por robo (ej: 10 = 10% del valor del vehículo)
+     */
+    @Column(name = "theft_deductible_percentage")
+    @Builder.Default
+    private Integer theftDeductiblePercentage = 10;
+
     // ========================================
     // Estado y auditoría
     // ========================================
@@ -213,6 +220,13 @@ public class Vehicle {
      */
     public String getFullDescription() {
         return String.format("%s %s %d - %s", brand, model, year, licensePlate);
+    }
+
+    /**
+     * Obtiene el porcentaje de deducible por robo (default 10%)
+     */
+    public Integer getTheftDeductiblePercentage() {
+        return theftDeductiblePercentage != null ? theftDeductiblePercentage : 10;
     }
 
     /**
