@@ -129,16 +129,22 @@ jobs:
             else
               echo "Systemd no configurado. Iniciando manualmente..."
               
-              # Detener proceso anterior si existe
-              PID=$(pgrep -f "$JAR_NAME" || echo "")
-              if [ -n "$PID" ]; then
-                echo "Deteniendo proceso anterior (PID: $PID)..."
-                kill $PID 2>/dev/null || true
+              # Desactivar set -e temporalmente para manejar kills
+              set +e
+              
+              # Detener procesos anteriores si existen
+              PIDS=$(pgrep -f "$JAR_NAME")
+              if [ -n "$PIDS" ]; then
+                echo "Deteniendo procesos anteriores: $PIDS"
+                echo "$PIDS" | xargs -r kill 2>/dev/null
                 sleep 5
-                # Forzar si sigue vivo
-                kill -9 $PID 2>/dev/null || true
+                # Forzar si siguen vivos
+                echo "$PIDS" | xargs -r kill -9 2>/dev/null
                 sleep 2
               fi
+              
+              # Reactivar set -e
+              set -e
               
               # Cargar variables de entorno si existen
               if [ -f "$APP_DIR/.env" ]; then
