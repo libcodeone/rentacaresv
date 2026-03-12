@@ -15,7 +15,6 @@ import com.itextpdf.layout.properties.TextAlignment;
 import com.itextpdf.layout.properties.UnitValue;
 import com.itextpdf.layout.properties.VerticalAlignment;
 import com.rentacaresv.contract.domain.*;
-import com.rentacaresv.contract.infrastructure.VehicleDiagramRepository;
 import com.rentacaresv.customer.domain.Customer;
 import com.rentacaresv.rental.domain.Rental;
 import com.rentacaresv.settings.application.SettingsCache;
@@ -29,7 +28,6 @@ import java.net.URL;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -43,7 +41,6 @@ import java.util.stream.Collectors;
 public class ContractPdfGenerator {
 
     private final SettingsCache settingsCache;
-    private final VehicleDiagramRepository vehicleDiagramRepository;
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter DATETIME_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
@@ -237,7 +234,8 @@ public class ContractPdfGenerator {
         addCell(table, "Depósito:", deposit, 1);
         String accDeductible = contract.getAccidentDeductible() != null ? "$" + contract.getAccidentDeductible() : "-";
         addCell(table, "Ded. Accidente:", accDeductible, 1);
-        String theftDeductible = contract.getTheftDeductible() != null ? "$" + contract.getTheftDeductible() : "-";
+        // Deducible por robo como porcentaje del valor del vehículo
+        String theftDeductible = vehicle.getTheftDeductiblePercentage() + "% del valor";
         addCell(table, "Ded. Robo:", theftDeductible, 1);
 
         document.add(table);
@@ -344,99 +342,95 @@ public class ContractPdfGenerator {
     }
 
     // ========================================
-    // DIAGRAMA DE DAÑOS
+    // VIDEO DEL ESTADO DEL VEHÍCULO
     // ========================================
     private void addDamagesDiagramSection(Document document, Contract contract, Vehicle vehicle) {
-        document.add(createSectionTitle("ESTADO DEL VEHÍCULO - DIAGRAMA DE DAÑOS"));
+        document.add(createSectionTitle("ESTADO DEL VEHÍCULO - VIDEO"));
 
-        // Intentar cargar el diagrama del vehículo
-        boolean diagramAdded = false;
-        if (vehicle.getVehicleType() != null) {
-            try {
-                Optional<VehicleDiagram> diagramOpt = vehicleDiagramRepository
-                        .findByVehicleTypeAndIsActiveTrue(vehicle.getVehicleType());
-                
-                if (diagramOpt.isPresent()) {
-                    VehicleDiagram diagram = diagramOpt.get();
-                    String imageUrl = diagram.getDiagramUrl();
-                    
-                    if (imageUrl != null && !imageUrl.isEmpty()) {
-                        ImageData imageData = ImageDataFactory.create(new URL(imageUrl));
-                        Image diagramImage = new Image(imageData);
-                        diagramImage.setMaxWidth(480);
-                        diagramImage.setMaxHeight(220);
-                        diagramImage.setHorizontalAlignment(HorizontalAlignment.CENTER);
-                        
-                        // Contenedor con borde
-                        Table diagramTable = new Table(1);
-                        diagramTable.setWidth(UnitValue.createPercentValue(100));
-                        Cell diagramCell = new Cell()
-                                .setBorder(new SolidBorder(BORDER_COLOR, 1))
-                                .setPadding(10)
-                                .setTextAlignment(TextAlignment.CENTER);
-                        diagramCell.add(diagramImage);
-                        diagramTable.addCell(diagramCell);
-                        document.add(diagramTable);
-                        diagramAdded = true;
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("No se pudo cargar imagen del diagrama: {}", e.getMessage());
-            }
-        }
+        Table videoTable = new Table(1);
+        videoTable.setWidth(UnitValue.createPercentValue(100));
+        
+        Cell videoCell = new Cell()
+                .setBorder(new SolidBorder(BORDER_COLOR, 1))
+                .setPadding(15)
+                .setTextAlignment(TextAlignment.CENTER);
 
-        if (!diagramAdded) {
-            // Placeholder si no hay diagrama
-            Table placeholderTable = new Table(1);
-            placeholderTable.setWidth(UnitValue.createPercentValue(100));
-            Cell placeholderCell = new Cell()
-                    .setBorder(new SolidBorder(BORDER_COLOR, 1))
-                    .setPadding(20)
-                    .setMinHeight(100)
-                    .setTextAlignment(TextAlignment.CENTER)
-                    .setVerticalAlignment(VerticalAlignment.MIDDLE);
-            placeholderCell.add(new Paragraph("DIAGRAMA DEL VEHÍCULO")
-                    .setFontSize(FONT_NORMAL).setItalic().setFontColor(new DeviceRgb(150, 150, 150)));
-            placeholderCell.add(new Paragraph("(Configure el diagrama en Catálogo de Contratos)")
-                    .setFontSize(FONT_SMALL).setItalic().setFontColor(new DeviceRgb(150, 150, 150)));
-            placeholderTable.addCell(placeholderCell);
-            document.add(placeholderTable);
-        }
-
-        // Lista de daños marcados
-        Set<ContractDamageMark> damageMarks = contract.getDamageMarks();
-        if (damageMarks != null && !damageMarks.isEmpty()) {
-            document.add(new Paragraph().setMarginTop(8));
-            document.add(new Paragraph("DAÑOS REGISTRADOS:").setBold().setFontSize(FONT_NORMAL));
+        // Verificar si hay video del vehículo
+        String videoUrl = contract.getVehicleVideoUrl();
+        
+        if (videoUrl != null && !videoUrl.isEmpty()) {
+            // Hay video - mostrar icono y enlace
+            videoCell.add(new Paragraph("🎥")
+                    .setFontSize(24)
+                    .setTextAlignment(TextAlignment.CENTER));
             
-            Table damageTable = new Table(new float[]{2, 4});
-            damageTable.setWidth(UnitValue.createPercentValue(100));
+            videoCell.add(new Paragraph("VIDEO DEL ESTADO DEL VEHÍCULO")
+                    .setBold()
+                    .setFontSize(FONT_SUBTITLE)
+                    .setFontColor(PRIMARY_COLOR)
+                    .setTextAlignment(TextAlignment.CENTER));
             
-            // Header
-            damageTable.addHeaderCell(createHeaderCell("Tipo de Daño"));
-            damageTable.addHeaderCell(createHeaderCell("Descripción / Ubicación"));
-            
-            for (ContractDamageMark mark : damageMarks) {
-                Cell typeCell = new Cell().setPadding(4).setBorder(new SolidBorder(BORDER_COLOR, 0.5f));
-                typeCell.add(new Paragraph(mark.getDamageType().getLabel())
-                        .setBold().setFontSize(FONT_SMALL)
-                        .setFontColor(new DeviceRgb(180, 0, 0)));
-                damageTable.addCell(typeCell);
-                
-                Cell descCell = new Cell().setPadding(4).setBorder(new SolidBorder(BORDER_COLOR, 0.5f));
-                String desc = mark.getDescription() != null && !mark.getDescription().isEmpty() 
-                        ? mark.getDescription() : "Sin descripción adicional";
-                descCell.add(new Paragraph(desc).setFontSize(FONT_SMALL));
-                damageTable.addCell(descCell);
-            }
-            
-            document.add(damageTable);
-        } else {
-            document.add(new Paragraph("✓ Sin daños registrados - Vehículo en buen estado")
+            videoCell.add(new Paragraph("Se grabó un video mostrando el estado del vehículo al momento de la entrega.")
                     .setFontSize(FONT_SMALL)
-                    .setFontColor(SUCCESS_COLOR)
+                    .setTextAlignment(TextAlignment.CENTER)
+                    .setMarginTop(5));
+            
+            // Link al video
+            videoCell.add(new Paragraph()
+                    .setMarginTop(10)
+                    .add(new Text("Ver video: ").setFontSize(FONT_SMALL))
+                    .add(new Text(videoUrl)
+                            .setFontSize(FONT_SMALL)
+                            .setFontColor(new DeviceRgb(0, 102, 204))
+                            .setUnderline()));
+            
+            videoCell.add(new Paragraph("(Copie y pegue el enlace en su navegador para ver el video)")
+                    .setFontSize(7)
+                    .setItalic()
+                    .setFontColor(new DeviceRgb(120, 120, 120))
+                    .setTextAlignment(TextAlignment.CENTER)
+                    .setMarginTop(3));
+            
+        } else {
+            // No hay video
+            videoCell.add(new Paragraph("📹")
+                    .setFontSize(20)
+                    .setFontColor(new DeviceRgb(150, 150, 150))
+                    .setTextAlignment(TextAlignment.CENTER));
+            
+            videoCell.add(new Paragraph("VIDEO NO DISPONIBLE")
+                    .setFontSize(FONT_NORMAL)
+                    .setItalic()
+                    .setFontColor(new DeviceRgb(150, 150, 150))
+                    .setTextAlignment(TextAlignment.CENTER));
+            
+            videoCell.add(new Paragraph("No se grabó video del estado del vehículo para este contrato.")
+                    .setFontSize(FONT_SMALL)
+                    .setFontColor(new DeviceRgb(150, 150, 150))
+                    .setTextAlignment(TextAlignment.CENTER)
                     .setMarginTop(5));
         }
+
+        videoTable.addCell(videoCell);
+        document.add(videoTable);
+        
+        // Nota informativa
+        Table noteTable = new Table(1);
+        noteTable.setWidth(UnitValue.createPercentValue(100));
+        noteTable.setMarginTop(8);
+        
+        Cell noteCell = new Cell()
+                .setBackgroundColor(WARNING_BG)
+                .setBorder(new SolidBorder(BORDER_COLOR, 0.5f))
+                .setPadding(8);
+        noteCell.add(new Paragraph("IMPORTANTE:")
+                .setBold()
+                .setFontSize(FONT_SMALL));
+        noteCell.add(new Paragraph("El video adjunto constituye evidencia del estado del vehículo al momento de la entrega. " +
+                "Cualquier daño no visible en el video y encontrado durante la devolución será responsabilidad del arrendatario.")
+                .setFontSize(FONT_SMALL));
+        noteTable.addCell(noteCell);
+        document.add(noteTable);
         
         document.add(new Paragraph().setMarginBottom(8));
     }
@@ -449,11 +443,11 @@ public class ContractPdfGenerator {
 
         List<String> terms = List.of(
             "El arrendatario se compromete a devolver el vehículo en las mismas condiciones en que lo recibió.",
-            "Entregar lavado el vehículo, de lo contrario se cobrará $5.00 extra.",
+            "Entregar lavado el vehículo, de lo contrario se cobrará entre $5 a $15 dependiendo de cómo se entregue de sucio.",
             "Manchas o derrame de líquido en tapicería: $20.00.",
             "El arrendatario es responsable de cualquier daño o pérdida del vehículo durante el período de renta.",
             "En caso de accidente, el arrendatario participará con el deducible establecido en este contrato.",
-            "En caso de robo, aplicará el deducible por robo acordado.",
+            "En caso de robo, aplicará el deducible por robo acordado (porcentaje del valor del vehículo).",
             "El vehículo no puede salir del país sin autorización previa por escrito.",
             "Está prohibido fumar dentro del vehículo."
         );
@@ -531,10 +525,31 @@ public class ContractPdfGenerator {
         // ===== FIRMA EMPLEADO =====
         Cell employeeCell = new Cell().setBorder(Border.NO_BORDER).setTextAlignment(TextAlignment.CENTER)
                 .setPaddingLeft(30).setPaddingRight(30);
-        employeeCell.add(new Paragraph().setMarginTop(70));
+        
+        // Agregar imagen de firma del empleado si existe
+        if (contract.getEmployeeSignatureUrl() != null && !contract.getEmployeeSignatureUrl().isEmpty()) {
+            try {
+                ImageData employeeSignatureData = ImageDataFactory.create(new URL(contract.getEmployeeSignatureUrl()));
+                Image employeeSignatureImg = new Image(employeeSignatureData);
+                employeeSignatureImg.setMaxHeight(70);
+                employeeSignatureImg.setMaxWidth(180);
+                employeeSignatureImg.setHorizontalAlignment(HorizontalAlignment.CENTER);
+                employeeCell.add(employeeSignatureImg);
+            } catch (Exception e) {
+                log.warn("No se pudo cargar la firma del empleado: {}", e.getMessage());
+                employeeCell.add(new Paragraph().setMarginTop(50));
+            }
+        } else {
+            employeeCell.add(new Paragraph().setMarginTop(50));
+        }
+        
         employeeCell.add(new Paragraph("_______________________________").setFontSize(FONT_SMALL));
         employeeCell.add(new Paragraph("EMPLEADO").setBold().setFontSize(FONT_SMALL));
-        employeeCell.add(new Paragraph(settingsCache.getCompanyName()).setFontSize(FONT_SMALL));
+        
+        // Nombre del empleado si existe, sino nombre de la empresa
+        String employeeName = contract.getEmployeeName() != null && !contract.getEmployeeName().isEmpty() 
+                ? contract.getEmployeeName() : settingsCache.getCompanyName();
+        employeeCell.add(new Paragraph(employeeName).setFontSize(FONT_SMALL));
         table.addCell(employeeCell);
 
         document.add(table);

@@ -85,6 +85,9 @@ public class VehicleFormDialog extends Dialog {
     private NumberField priceVip;
     private NumberField priceMoreThan15Days;
     private NumberField priceMonthly;
+    
+    // Deducible por robo
+    private IntegerField theftDeductiblePercentage;
 
     private TextArea notes;
 
@@ -373,6 +376,15 @@ public class VehicleFormDialog extends Dialog {
         priceVip = createPriceField("Precio VIP (día)");
         priceMoreThan15Days = createPriceField("Precio +15 días");
         priceMonthly = createPriceField("Precio Mensual");
+        
+        // Deducible por robo
+        theftDeductiblePercentage = new IntegerField("Deducible por Robo (%)");
+        theftDeductiblePercentage.setMin(1);
+        theftDeductiblePercentage.setMax(100);
+        theftDeductiblePercentage.setValue(10);
+        theftDeductiblePercentage.setStepButtonsVisible(true);
+        theftDeductiblePercentage.setSuffixComponent(new Span("%"));
+        theftDeductiblePercentage.setHelperText("Porcentaje del valor del vehículo");
 
         notes = new TextArea("Notas");
         notes.setPlaceholder("Información adicional...");
@@ -438,7 +450,7 @@ public class VehicleFormDialog extends Dialog {
         FormLayout pricesLayout = new FormLayout();
         pricesLayout.setResponsiveSteps(
                 new FormLayout.ResponsiveStep("0", 2));
-        pricesLayout.add(priceNormal, priceVip, priceMoreThan15Days, priceMonthly);
+        pricesLayout.add(priceNormal, priceVip, priceMoreThan15Days, priceMonthly, theftDeductiblePercentage);
 
         // Notas
         formLayout.add(notes, 2);
@@ -737,6 +749,7 @@ public class VehicleFormDialog extends Dialog {
                         value -> value != null ? BigDecimal.valueOf(value) : null,
                         value -> value != null ? value.doubleValue() : null)
                 .bind("priceMonthly");
+        binder.forField(theftDeductiblePercentage).bind("theftDeductiblePercentage");
         binder.forField(notes).bind("notes");
 
         binder.readBean(command);
@@ -881,6 +894,13 @@ public class VehicleFormDialog extends Dialog {
         priceVip.setValue(vehicle.getPriceVip().doubleValue());
         priceMoreThan15Days.setValue(vehicle.getPriceMoreThan15Days().doubleValue());
         priceMonthly.setValue(vehicle.getPriceMonthly().doubleValue());
+        
+        // Deducible por robo
+        if (vehicle.getTheftDeductiblePercentage() != null) {
+            theftDeductiblePercentage.setValue(vehicle.getTheftDeductiblePercentage());
+        } else {
+            theftDeductiblePercentage.setValue(10);
+        }
 
         if (vehicle.getNotes() != null) notes.setValue(vehicle.getNotes());
     }

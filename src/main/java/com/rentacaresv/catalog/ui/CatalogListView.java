@@ -153,6 +153,13 @@ public class CatalogListView extends VerticalLayout {
         brandGrid = new Grid<>(VehicleBrandDTO.class, false);
         brandGrid.setSizeFull();
 
+        // Columna de Acciones (PRIMERA - FIJA)
+        brandGrid.addComponentColumn(this::createBrandActions)
+                .setHeader("Acciones")
+                .setWidth("150px")
+                .setFlexGrow(0)
+                .setFrozen(true);
+
         brandGrid.addColumn(VehicleBrandDTO::getName)
                 .setHeader("Nombre")
                 .setAutoWidth(true)
@@ -164,10 +171,6 @@ public class CatalogListView extends VerticalLayout {
 
         brandGrid.addComponentColumn(this::createBrandStatusBadge)
                 .setHeader("Estado")
-                .setAutoWidth(true);
-
-        brandGrid.addComponentColumn(this::createBrandActions)
-                .setHeader("Acciones")
                 .setAutoWidth(true);
 
         layout.add(toolbar, brandGrid);
@@ -341,6 +344,13 @@ public class CatalogListView extends VerticalLayout {
         modelGrid = new Grid<>(VehicleModelDTO.class, false);
         modelGrid.setSizeFull();
 
+        // Columna de Acciones (PRIMERA - FIJA)
+        modelGrid.addComponentColumn(this::createModelActions)
+                .setHeader("Acciones")
+                .setWidth("150px")
+                .setFlexGrow(0)
+                .setFrozen(true);
+
         modelGrid.addColumn(VehicleModelDTO::getBrandName)
                 .setHeader("Marca")
                 .setAutoWidth(true);
@@ -365,10 +375,6 @@ public class CatalogListView extends VerticalLayout {
 
         modelGrid.addComponentColumn(this::createModelStatusBadge)
                 .setHeader("Estado")
-                .setAutoWidth(true);
-
-        modelGrid.addComponentColumn(this::createModelActions)
-                .setHeader("Acciones")
                 .setAutoWidth(true);
 
         layout.add(toolbar, modelGrid);

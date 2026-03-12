@@ -36,6 +36,9 @@ public class VehicleDTO {
     private BigDecimal priceMoreThan15Days;
     private BigDecimal priceMonthly;
     
+    // Deducible por robo (%)
+    private Integer theftDeductiblePercentage;
+    
     // Estado
     private String status;
     private String notes;

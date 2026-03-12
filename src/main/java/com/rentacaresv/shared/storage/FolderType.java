@@ -12,8 +12,9 @@ public enum FolderType {
     CONTRACTS("contracts"),           // Carpeta principal de contratos
     CONTRACT_SIGNATURES("contracts/signatures"),  // Firmas digitales
     CONTRACT_DOCUMENTS("contracts/documents"),    // Fotos de documentos de identidad
-    CONTRACT_DIAGRAMS("contracts/diagrams"),      // Diagramas con marcas de daños
-    CONTRACT_PDFS("contracts/pdfs");              // PDFs generados
+    CONTRACT_DIAGRAMS("contracts/diagrams"),      // Diagramas con marcas de daños (legacy)
+    CONTRACT_PDFS("contracts/pdfs"),              // PDFs generados
+    CONTRACT_VIDEOS("contracts/videos");          // Videos de estado del vehículo
 
     private final String folderName;
 

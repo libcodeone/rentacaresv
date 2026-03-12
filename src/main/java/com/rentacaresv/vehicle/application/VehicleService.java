@@ -60,6 +60,7 @@ public class VehicleService {
                 .priceVip(command.getPriceVip())
                 .priceMoreThan15Days(command.getPriceMoreThan15Days())
                 .priceMonthly(command.getPriceMonthly())
+                .theftDeductiblePercentage(command.getTheftDeductiblePercentage() != null ? command.getTheftDeductiblePercentage() : 10)
                 .status(VehicleStatus.AVAILABLE)
                 .notes(command.getNotes())
                 .build();
@@ -101,6 +102,7 @@ public class VehicleService {
         vehicle.setPriceVip(command.getPriceVip());
         vehicle.setPriceMoreThan15Days(command.getPriceMoreThan15Days());
         vehicle.setPriceMonthly(command.getPriceMonthly());
+        vehicle.setTheftDeductiblePercentage(command.getTheftDeductiblePercentage() != null ? command.getTheftDeductiblePercentage() : 10);
         vehicle.setNotes(command.getNotes());
 
         // El estado y otros campos de negocio no se cambian aquí directamente
