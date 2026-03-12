@@ -71,5 +71,10 @@ public class CreateVehicleCommand {
     @DecimalMin(value = "0.01", message = "El precio debe ser mayor a 0")
     private BigDecimal priceMonthly;
 
+    @Min(value = 1, message = "El deducible debe ser al menos 1%")
+    @Max(value = 100, message = "El deducible no puede ser mayor a 100%")
+    @Builder.Default
+    private Integer theftDeductiblePercentage = 10;
+
     private String notes;
 }

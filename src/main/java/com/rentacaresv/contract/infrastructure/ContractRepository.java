@@ -49,10 +49,11 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
 
     /**
      * Busca un contrato por ID básico (sin colecciones)
+     * Incluye todos los campos del contrato incluyendo firmas
      */
     @Query("SELECT c FROM Contract c " +
            "LEFT JOIN FETCH c.rental r " +
-           "LEFT JOIN FETCH r.vehicle " +
+           "LEFT JOIN FETCH r.vehicle v " +
            "LEFT JOIN FETCH r.customer " +
            "WHERE c.id = :id")
     Optional<Contract> findByIdBasic(@Param("id") Long id);

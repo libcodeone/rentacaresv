@@ -40,6 +40,7 @@ public class VehicleMapper {
                 .priceVip(vehicle.getPriceVip())
                 .priceMoreThan15Days(vehicle.getPriceMoreThan15Days())
                 .priceMonthly(vehicle.getPriceMonthly())
+                .theftDeductiblePercentage(vehicle.getTheftDeductiblePercentage())
                 .status(vehicle.getStatus().name())
                 .notes(vehicle.getNotes())
                 .fullDescription(vehicle.getFullDescription())
