@@ -53,7 +53,9 @@ public class SecurityConfig {
                     "/manifest.webmanifest",// PWA manifest
                     "/sw.js",               // Service worker
                     "/offline.html",        // Página offline
-                    "/api/google-calendar/callback" // OAuth2 callback de Google Calendar
+                    "/api/google-calendar/callback", // OAuth2 callback de Google Calendar
+                    "/forgot-password",    // Recuperación de contraseña
+                    "/reset-password"      // Restablecer contraseña
                 ).permitAll());
 
         // Configuración de Vaadin Security con login view
