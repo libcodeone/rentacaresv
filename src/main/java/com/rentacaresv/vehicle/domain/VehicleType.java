@@ -10,7 +10,7 @@ public enum VehicleType {
     HATCHBACK("Hatchback"),
     COUPE("Coupé"),
     MINIVAN("Minivan"),
-    VAN("Van"),
+    MICROBUS("Microbús"),
     TRUCK("Camión"),
     MOTORCYCLE("Motocicleta"),
     OTHER("Otro");
