@@ -1449,7 +1449,7 @@ private VerticalLayout createVideoUploadSection(String title, String videoType, 
         List<ContractService.ContractAccessoryDTO> accessoryDTOs = new ArrayList<>();
         for (var entry : accessoryCheckboxes.entrySet()) {
             ContractService.ContractAccessoryDTO dto = new ContractService.ContractAccessoryDTO();
-            dto.setId(entry.getKey());
+            dto.setCatalogId(entry.getKey());
             dto.setIsPresent(entry.getValue().getValue());
             accessoryDTOs.add(dto);
         }

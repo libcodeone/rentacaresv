@@ -6,7 +6,6 @@ import com.rentacaresv.rental.domain.Rental;
 import com.rentacaresv.rental.infrastructure.RentalRepository;
 import com.rentacaresv.shared.storage.FileStorageService;
 import com.rentacaresv.shared.storage.FolderType;
-import com.vaadin.flow.component.map.Map;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +18,7 @@ import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -60,12 +60,14 @@ public class ContractService {
         }
         
         Contract contract = contractOpt.get();
+        Long contractId = contract.getId();
         
-        // Cargar accesorios (Hibernate los inicializa en la misma sesión)
-        contractRepository.findByIdWithAccessories(contract.getId());
+        // Cargar accesorios y forzar inicialización
+        contractRepository.findByIdWithAccessories(contractId);
+        log.debug("✅ Accesorios cargados: {}", contract.getAccessories().size());
         
         // Cargar marcas de daño
-        contractRepository.findByIdWithDamageMarks(contract.getId());
+        contractRepository.findByIdWithDamageMarks(contractId);
         
         return Optional.of(contract);
     }
@@ -83,11 +85,12 @@ public class ContractService {
         
         Contract contract = contractOpt.get();
         
-        // Cargar accesorios
-        contractRepository.findByIdWithAccessories(contract.getId());
+        // Cargar accesorios y forzar inicialización
+        contractRepository.findByIdWithAccessories(id);
+        log.debug("✅ Accesorios cargados para PDF: {}", contract.getAccessories().size());
         
         // Cargar marcas de daño
-        contractRepository.findByIdWithDamageMarks(contract.getId());
+        contractRepository.findByIdWithDamageMarks(id);
         
         return Optional.of(contract);
     }
@@ -164,22 +167,10 @@ public class ContractService {
 
         contract = contractRepository.save(contract);
 
-        // Agregar accesorios del catálogo
-        List<AccessoryCatalog> accessories = accessoryCatalogRepository.findAllActiveOrdered();
-        for (AccessoryCatalog catalogItem : accessories) {
-            ContractAccessory accessory = ContractAccessory.builder()
-                    .contract(contract)
-                    .accessoryCatalogId(catalogItem.getId())
-                    .accessoryName(catalogItem.getName())
-                    .isPresent(true) // Por defecto todos presentes
-                    .displayOrder(catalogItem.getDisplayOrder())
-                    .build();
-            contract.addAccessory(accessory);
-        }
-
-        contract = contractRepository.save(contract);
-
-        log.info("✅ Contrato creado con token: {}", contract.getToken());
+        // Los accesorios se agregarán desde la vista pública la primera vez que se llame a updateAccessories()
+        // El contrato inicia SIN accesorios
+        
+        log.info("✅ Contrato creado con token: {} (sin accesorios)", contract.getToken());
         return contract;
     }
 
@@ -240,43 +231,41 @@ public class ContractService {
             throw new IllegalStateException("El contrato no puede ser modificado");
         }
 
-        // Crear un mapa de accesorios del catálogo recibidos
-        HashMap<Long, ContractAccessoryDTO> catalogAccessoriesMap = accessoriesDTO.stream()
+        log.info("📦 updateAccessories - DTOs recibidos: {}", accessoriesDTO.size());
+        log.info("📦 updateAccessories - Accesorios en contrato antes: {}", contract.getAccessories().size());
+
+        // Crear mapa de DTOs por catalogId para acceso rápido
+        Map<Long, ContractAccessoryDTO> dtoMap = accessoriesDTO.stream()
                 .collect(Collectors.toMap(
-                        ContractAccessoryDTO::getId,
-                        dto -> dto,
-                        (existing, replacement) -> existing,
-                        HashMap::new
+                        ContractAccessoryDTO::getCatalogId,
+                        dto -> dto
                 ));
 
-        // Actualizar accesorios existentes o eliminar los que ya no están
-        contract.getAccessories().removeIf(accessory -> {
-            Long catalogId = accessory.getAccessoryCatalogId();
-            if (catalogId != null && catalogAccessoriesMap.containsKey(catalogId)) {
-                // Actualizar el accesorio existente
-                ContractAccessoryDTO dto = catalogAccessoriesMap.get(catalogId);
-                accessory.setIsPresent(dto.getIsPresent());
-                accessory.setObservations(dto.getObservations());
-                return false; // Mantener el accesorio
+        // Crear mapa de accesorios existentes por catalogId
+        Map<Long, ContractAccessory> existingMap = new HashMap<>();
+        for (ContractAccessory acc : contract.getAccessories()) {
+            if (acc.getAccessoryCatalogId() != null) {
+                existingMap.put(acc.getAccessoryCatalogId(), acc);
             }
-            // Si el accesorio ya no está en la lista, eliminarlo
-            return catalogId != null;
-        });
+        }
 
-        // Obtener IDs de accesorios que ya están en el contrato
-        Set<Long> existingCatalogIds = contract.getAccessories().stream()
-                .map(ContractAccessory::getAccessoryCatalogId)
-                .filter(java.util.Objects::nonNull)
-                .collect(Collectors.toSet());
+        log.info("📦 Accesorios existentes en contrato: {}", existingMap.size());
 
-        // Agregar nuevos accesorios del catálogo que no están en el contrato
+        // Actualizar o crear accesorios
         for (ContractAccessoryDTO dto : accessoriesDTO) {
-            if (!existingCatalogIds.contains(dto.getId())) {
-                // Obtener info del catálogo
-                Optional<AccessoryCatalog> catalogItem = accessoryCatalogRepository.findById(dto.getId());
+            Long catalogId = dto.getCatalogId();
+            
+            if (existingMap.containsKey(catalogId)) {
+                // ACTUALIZAR existente
+                ContractAccessory existing = existingMap.get(catalogId);
+                existing.setIsPresent(dto.getIsPresent());
+                existing.setObservations(dto.getObservations());
+                log.debug("🔄 Actualizado: {} (isPresent={})", existing.getAccessoryName(), dto.getIsPresent());
+            } else {
+                // CREAR nuevo
+                Optional<AccessoryCatalog> catalogItem = accessoryCatalogRepository.findById(catalogId);
                 if (catalogItem.isPresent()) {
-                    ContractAccessory newAccessory = ContractAccessory.builder()
-                            .contract(contract)
+                    ContractAccessory newAccessory = ContractAccessory.builder()    
                             .accessoryCatalogId(catalogItem.get().getId())
                             .accessoryName(catalogItem.get().getName())
                             .isPresent(dto.getIsPresent())
@@ -284,9 +273,14 @@ public class ContractService {
                             .displayOrder(catalogItem.get().getDisplayOrder())
                             .build();
                     contract.addAccessory(newAccessory);
+                    log.debug("➕ Agregado: {} (isPresent={})", catalogItem.get().getName(), dto.getIsPresent());
+                } else {
+                    log.warn("⚠️ No se encontró accesorio en catálogo con ID: {}", catalogId);
                 }
             }
         }
+        
+        log.info("📦 updateAccessories - Accesorios en contrato después: {}", contract.getAccessories().size());
 
         return contractRepository.save(contract);
     }
@@ -770,7 +764,7 @@ public class ContractService {
     @lombok.NoArgsConstructor
     @lombok.AllArgsConstructor
     public static class ContractAccessoryDTO {
-        private Long id;
+        private Long catalogId;
         private String accessoryName;
         private Boolean isPresent;
         private String observations;

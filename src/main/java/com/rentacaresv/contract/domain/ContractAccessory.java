@@ -22,7 +22,6 @@ public class ContractAccessory {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @EqualsAndHashCode.Include
     private Long id;
 
     /**
@@ -36,6 +35,7 @@ public class ContractAccessory {
      * ID del accesorio del catálogo (si aplica)
      */
     @Column(name = "accessory_catalog_id")
+    @EqualsAndHashCode.Include
     private Long accessoryCatalogId;
 
     /**
