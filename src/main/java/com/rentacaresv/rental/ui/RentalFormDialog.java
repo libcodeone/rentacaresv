@@ -3,6 +3,7 @@ package com.rentacaresv.rental.ui;
 import com.rentacaresv.customer.application.CustomerDTO;
 import com.rentacaresv.customer.application.CustomerService;
 import com.rentacaresv.rental.application.CreateRentalCommand;
+import com.rentacaresv.rental.application.RentalDTO;
 import com.rentacaresv.rental.application.RentalService;
 import com.rentacaresv.shared.util.FormatUtils;
 import com.rentacaresv.vehicle.application.VehicleDTO;
@@ -37,9 +38,12 @@ import com.vaadin.flow.shared.Registration;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.Collectors;
 
 /**
  * Diálogo para crear nuevas rentas
@@ -53,6 +57,9 @@ public class RentalFormDialog extends Dialog {
     private final VehiclePhotoService vehiclePhotoService;
     private final BeanValidationBinder<CreateRentalCommand> binder;
     private CreateRentalCommand command;
+    
+    // Mensaje de ayuda para fechas no disponibles
+    private Span unavailableDatesMessage;
     
     // Lista de vehículos disponibles
     private List<VehicleDTO> availableVehicles;
@@ -141,6 +148,7 @@ public class RentalFormDialog extends Dialog {
         vehicleCombo.setItemLabelGenerator(v -> v.getLicensePlate() + " - " + v.getBrand() + " " + v.getModel());
         vehicleCombo.addValueChangeListener(e -> {
             updateVehiclePreview(e.getValue());
+            updateDisabledDates(e.getValue());
             calculatePrice();
         });
         vehicleCombo.setWidthFull();
@@ -204,6 +212,19 @@ public class RentalFormDialog extends Dialog {
             calculatePrice();
         });
         
+        // Mensaje de ayuda para fechas no disponibles
+        unavailableDatesMessage = new Span();
+        unavailableDatesMessage.setVisible(false);
+        unavailableDatesMessage.getStyle()
+            .set("color", "var(--lumo-error-text-color)")
+            .set("font-size", "0.875rem")
+            .set("font-style", "italic")
+            .set("padding", "0.5rem")
+            .set("background", "var(--lumo-error-color-10pct)")
+            .set("border-radius", "var(--lumo-border-radius-s)")
+            .set("display", "block")
+            .set("margin-bottom", "1rem");
+        
         notes = new TextArea("Notas");
         notes.setPlaceholder("Información adicional...");
         notes.setMaxLength(500);
@@ -238,6 +259,7 @@ public class RentalFormDialog extends Dialog {
         basicFormLayout.add(vehicleCombo, 2);
         basicFormLayout.add(customerCombo, 2);
         basicFormLayout.add(startDate, endDate);
+        basicFormLayout.add(unavailableDatesMessage, 2);
         basicFormLayout.add(notes, 2);
         
         // ========================================
@@ -484,6 +506,98 @@ public class RentalFormDialog extends Dialog {
             case "ELECTRIC" -> "Eléctrico";
             default -> type;
         };
+    }
+
+    /**
+     * Actualiza las fechas deshabilitadas en los DatePickers
+     * según las rentas activas del vehículo seleccionado
+     */
+    private void updateDisabledDates(VehicleDTO vehicle) {
+        if (vehicle == null) {
+            // Limpiar fechas deshabilitadas
+            startDate.setEnabled(true);
+            endDate.setEnabled(true);
+            unavailableDatesMessage.setVisible(false);
+            return;
+        }
+
+        // Obtener rentas activas/pendientes del vehículo
+        List<RentalDTO> activeRentals = rentalService.findActiveRentalsByVehicleId(vehicle.getId());
+
+        if (activeRentals.isEmpty()) {
+            // No hay rentas, todas las fechas disponibles
+            unavailableDatesMessage.setVisible(false);
+            return;
+        }
+
+        // Construir lista de todas las fechas ocupadas
+        List<LocalDate> disabledDates = new ArrayList<>();
+        
+        for (RentalDTO rental : activeRentals) {
+            LocalDate current = rental.getStartDate();
+            LocalDate end = rental.getEndDate();
+            
+            // Agregar todas las fechas del rango (inclusive)
+            while (!current.isAfter(end)) {
+                disabledDates.add(current);
+                current = current.plusDays(1);
+            }
+        }
+
+        // Aplicar fechas deshabilitadas a ambos DatePickers
+        // NOTA: Vaadin DatePicker no tiene un método nativo setDisabledDates,
+        // pero podemos usar un DatePicker.DatePickerI18n para personalizar
+        // el comportamiento del calendario mediante JavaScript
+        
+        // Convertir fechas a formato ISO para JavaScript
+        String disabledDatesJson = disabledDates.stream()
+            .map(LocalDate::toString)
+            .map(date -> "\"" + date + "\"")
+            .collect(Collectors.joining(",", "[", "]"));
+
+        // Aplicar mediante JavaScript (Vaadin ejecuta esto en el cliente)
+        String script = String.format(
+            "const startDatePicker = this; " +
+            "const disabledDates = new Set(%s); " +
+            "startDatePicker._isDateDisabled = function(date) { " +
+            "  const dateStr = date.year + '-' + " +
+            "    String(date.month + 1).padStart(2, '0') + '-' + " +
+            "    String(date.day).padStart(2, '0'); " +
+            "  return disabledDates.has(dateStr); " +
+            "};",
+            disabledDatesJson
+        );
+        
+        startDate.getElement().executeJs(script);
+        endDate.getElement().executeJs(script);
+
+        // Mostrar mensaje informativo
+        if (!disabledDates.isEmpty()) {
+            String message = String.format(
+                "⚠️ El vehículo %s tiene %d renta(s) activa(s). " +
+                "Las fechas ocupadas están bloqueadas en el calendario. " +
+                "Selecciona fechas disponibles entre los períodos rentados.",
+                vehicle.getLicensePlate(),
+                activeRentals.size()
+            );
+            
+            // Agregar detalle de los rangos ocupados
+            StringBuilder rangesDetail = new StringBuilder("\n\nFechas ocupadas:\n");
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+            
+            for (RentalDTO rental : activeRentals) {
+                rangesDetail.append("• ")
+                    .append(rental.getStartDate().format(formatter))
+                    .append(" - ")
+                    .append(rental.getEndDate().format(formatter))
+                    .append(" (")
+                    .append(rental.getContractNumber())
+                    .append(")\n");
+            }
+            
+            unavailableDatesMessage.setText(message + rangesDetail.toString());
+            unavailableDatesMessage.setVisible(true);
+        }
     }
 
     private void configureButtons() {

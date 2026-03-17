@@ -43,7 +43,7 @@ public class ContractEmailService {
         try {
             // Recargar el contrato con todas las relaciones en esta nueva transacción
             Contract fullContract = loadContractWithRelations(contract.getId());
-            
+
             if (fullContract == null) {
                 log.error("No se pudo cargar el contrato ID: {}", contract.getId());
                 return;
@@ -75,9 +75,10 @@ public class ContractEmailService {
             log.error("Error enviando contrato por email: {}", e.getMessage(), e);
         }
     }
-    
+
     /**
-     * Carga el contrato con todas sus relaciones para evitar LazyInitializationException
+     * Carga el contrato con todas sus relaciones para evitar
+     * LazyInitializationException
      */
     private Contract loadContractWithRelations(Long contractId) {
         // Cargar contrato básico
@@ -85,15 +86,12 @@ public class ContractEmailService {
         if (contractOpt.isEmpty()) {
             return null;
         }
-        
+
         Contract contract = contractOpt.get();
-        
+
         // Cargar accesorios
         contractRepository.findByIdWithAccessories(contract.getId());
-        
-        // Cargar marcas de daño
-        contractRepository.findByIdWithDamageMarks(contract.getId());
-        
+
         return contract;
     }
 
