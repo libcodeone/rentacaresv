@@ -6,6 +6,7 @@ import com.rentacaresv.rental.domain.Rental;
 import com.rentacaresv.rental.infrastructure.RentalRepository;
 import com.rentacaresv.shared.storage.FileStorageService;
 import com.rentacaresv.shared.storage.FolderType;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -15,8 +16,12 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Servicio de aplicación para gestión de Contratos Digitales
@@ -55,12 +60,14 @@ public class ContractService {
         }
         
         Contract contract = contractOpt.get();
+        Long contractId = contract.getId();
         
-        // Cargar accesorios (Hibernate los inicializa en la misma sesión)
-        contractRepository.findByIdWithAccessories(contract.getId());
+        // Cargar accesorios y forzar inicialización
+        contractRepository.findByIdWithAccessories(contractId);
+        log.debug("✅ Accesorios cargados: {}", contract.getAccessories().size());
         
         // Cargar marcas de daño
-        contractRepository.findByIdWithDamageMarks(contract.getId());
+        contractRepository.findByIdWithDamageMarks(contractId);
         
         return Optional.of(contract);
     }
@@ -78,11 +85,12 @@ public class ContractService {
         
         Contract contract = contractOpt.get();
         
-        // Cargar accesorios
-        contractRepository.findByIdWithAccessories(contract.getId());
+        // Cargar accesorios y forzar inicialización
+        contractRepository.findByIdWithAccessories(id);
+        log.debug("✅ Accesorios cargados para PDF: {}", contract.getAccessories().size());
         
         // Cargar marcas de daño
-        contractRepository.findByIdWithDamageMarks(contract.getId());
+        contractRepository.findByIdWithDamageMarks(id);
         
         return Optional.of(contract);
     }
@@ -159,22 +167,10 @@ public class ContractService {
 
         contract = contractRepository.save(contract);
 
-        // Agregar accesorios del catálogo
-        List<AccessoryCatalog> accessories = accessoryCatalogRepository.findAllActiveOrdered();
-        for (AccessoryCatalog catalogItem : accessories) {
-            ContractAccessory accessory = ContractAccessory.builder()
-                    .contract(contract)
-                    .accessoryCatalogId(catalogItem.getId())
-                    .accessoryName(catalogItem.getName())
-                    .isPresent(true) // Por defecto todos presentes
-                    .displayOrder(catalogItem.getDisplayOrder())
-                    .build();
-            contract.addAccessory(accessory);
-        }
-
-        contract = contractRepository.save(contract);
-
-        log.info("✅ Contrato creado con token: {}", contract.getToken());
+        // Los accesorios se agregarán desde la vista pública la primera vez que se llame a updateAccessories()
+        // El contrato inicia SIN accesorios
+        
+        log.info("✅ Contrato creado con token: {} (sin accesorios)", contract.getToken());
         return contract;
     }
 
@@ -224,6 +220,7 @@ public class ContractService {
 
     /**
      * Actualiza el checklist de accesorios
+     * IMPORTANTE: El DTO ahora usa accessoryCatalogId en lugar del ID de ContractAccessory
      */
     @Transactional
     public Contract updateAccessories(String token, List<ContractAccessoryDTO> accessoriesDTO) {
@@ -234,32 +231,56 @@ public class ContractService {
             throw new IllegalStateException("El contrato no puede ser modificado");
         }
 
-        // Actualizar cada accesorio
-        for (ContractAccessoryDTO dto : accessoriesDTO) {
-            contract.getAccessories().stream()
-                    .filter(a -> a.getId().equals(dto.getId()))
-                    .findFirst()
-                    .ifPresent(accessory -> {
-                        accessory.setIsPresent(dto.getIsPresent());
-                        accessory.setObservations(dto.getObservations());
-                    });
+        log.info("📦 updateAccessories - DTOs recibidos: {}", accessoriesDTO.size());
+        log.info("📦 updateAccessories - Accesorios en contrato antes: {}", contract.getAccessories().size());
+
+        // Crear mapa de DTOs por catalogId para acceso rápido
+        Map<Long, ContractAccessoryDTO> dtoMap = accessoriesDTO.stream()
+                .collect(Collectors.toMap(
+                        ContractAccessoryDTO::getCatalogId,
+                        dto -> dto
+                ));
+
+        // Crear mapa de accesorios existentes por catalogId
+        Map<Long, ContractAccessory> existingMap = new HashMap<>();
+        for (ContractAccessory acc : contract.getAccessories()) {
+            if (acc.getAccessoryCatalogId() != null) {
+                existingMap.put(acc.getAccessoryCatalogId(), acc);
+            }
         }
 
-        // Agregar accesorios personalizados ("Otros")
-        if (accessoriesDTO.stream().anyMatch(dto -> dto.getId() == null && dto.getAccessoryName() != null)) {
-            accessoriesDTO.stream()
-                    .filter(dto -> dto.getId() == null && dto.getAccessoryName() != null)
-                    .forEach(dto -> {
-                        ContractAccessory custom = ContractAccessory.builder()
-                                .contract(contract)
-                                .accessoryName(dto.getAccessoryName())
-                                .isPresent(dto.getIsPresent())
-                                .observations(dto.getObservations())
-                                .displayOrder(999)
-                                .build();
-                        contract.addAccessory(custom);
-                    });
+        log.info("📦 Accesorios existentes en contrato: {}", existingMap.size());
+
+        // Actualizar o crear accesorios
+        for (ContractAccessoryDTO dto : accessoriesDTO) {
+            Long catalogId = dto.getCatalogId();
+            
+            if (existingMap.containsKey(catalogId)) {
+                // ACTUALIZAR existente
+                ContractAccessory existing = existingMap.get(catalogId);
+                existing.setIsPresent(dto.getIsPresent());
+                existing.setObservations(dto.getObservations());
+                log.debug("🔄 Actualizado: {} (isPresent={})", existing.getAccessoryName(), dto.getIsPresent());
+            } else {
+                // CREAR nuevo
+                Optional<AccessoryCatalog> catalogItem = accessoryCatalogRepository.findById(catalogId);
+                if (catalogItem.isPresent()) {
+                    ContractAccessory newAccessory = ContractAccessory.builder()    
+                            .accessoryCatalogId(catalogItem.get().getId())
+                            .accessoryName(catalogItem.get().getName())
+                            .isPresent(dto.getIsPresent())
+                            .observations(dto.getObservations())
+                            .displayOrder(catalogItem.get().getDisplayOrder())
+                            .build();
+                    contract.addAccessory(newAccessory);
+                    log.debug("➕ Agregado: {} (isPresent={})", catalogItem.get().getName(), dto.getIsPresent());
+                } else {
+                    log.warn("⚠️ No se encontró accesorio en catálogo con ID: {}", catalogId);
+                }
+            }
         }
+        
+        log.info("📦 updateAccessories - Accesorios en contrato después: {}", contract.getAccessories().size());
 
         return contractRepository.save(contract);
     }
@@ -651,9 +672,14 @@ public class ContractService {
 
     /**
      * Sube el video del estado del vehículo (entrega)
+     * @param token Token del contrato
+     * @param videoStream Stream del video
+     * @param fileName Nombre del archivo
+     * @param contentType Tipo de contenido (video/mp4, etc)
+     * @param videoType Tipo de video: "exterior", "interior", "details"
      */
     @Transactional
-    public Contract uploadVehicleVideo(String token, InputStream videoStream, String fileName, String contentType) {
+    public Contract uploadVehicleVideo(String token, InputStream videoStream, String fileName, String contentType, String videoType) {
         Contract contract = findByToken(token)
                 .orElseThrow(() -> new IllegalArgumentException("Contrato no encontrado"));
 
@@ -661,25 +687,40 @@ public class ContractService {
             throw new IllegalStateException("El contrato no puede ser modificado");
         }
 
-        log.info("📹 Subiendo video del vehículo para contrato ID: {}", contract.getId());
+        log.info("📹 Subiendo video del vehículo ({}) para contrato ID: {}", videoType, contract.getId());
 
         try {
+            // Nombre del archivo según el tipo
+            String filePrefix = switch (videoType) {
+                case "exterior" -> "video_exterior_";
+                case "interior" -> "video_interior_";
+                case "details" -> "video_detalles_";
+                default -> "video_";
+            };
+
             String videoUrl = fileStorageService.uploadFile(
                     videoStream,
-                    "video_entrega_" + contract.getId() + "_" + fileName,
+                    filePrefix + contract.getId() + "_" + fileName,
                     contentType,
                     FolderType.CONTRACT_VIDEOS,
                     null
             );
 
-            contract.setVehicleVideoUrl(videoUrl);
+            // Actualizar el campo correspondiente según el tipo
+            switch (videoType) {
+                case "exterior" -> contract.setVehicleExteriorVideoUrl(videoUrl);
+                case "interior" -> contract.setVehicleInteriorVideoUrl(videoUrl);
+                case "details" -> contract.setVehicleDetailsVideoUrl(videoUrl);
+                default -> throw new IllegalArgumentException("Tipo de video inválido: " + videoType);
+            }
+
             contract = contractRepository.save(contract);
 
-            log.info("✅ Video subido exitosamente: {}", videoUrl);
+            log.info("✅ Video {} subido exitosamente: {}", videoType, videoUrl);
             return contract;
 
         } catch (Exception e) {
-            log.error("❌ Error subiendo video: {}", e.getMessage(), e);
+            log.error("❌ Error subiendo video {}: {}", videoType, e.getMessage(), e);
             throw new RuntimeException("Error al subir video: " + e.getMessage(), e);
         }
     }
@@ -723,7 +764,7 @@ public class ContractService {
     @lombok.NoArgsConstructor
     @lombok.AllArgsConstructor
     public static class ContractAccessoryDTO {
-        private Long id;
+        private Long catalogId;
         private String accessoryName;
         private Boolean isPresent;
         private String observations;
