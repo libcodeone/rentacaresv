@@ -101,8 +101,10 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
     // Accesorios
     private Map<Long, Checkbox> accessoryCheckboxes = new HashMap<>();
 
-    // Video del vehículo
-    private String vehicleVideoUrl;
+    // Videos del vehículo (3 videos)
+    private String vehicleExteriorVideoUrl;
+    private String vehicleInteriorVideoUrl;
+    private String vehicleDetailsVideoUrl;
 
     // Firmas (cliente y empleado)
     private String clientSignatureBase64;
@@ -666,23 +668,57 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
                 .set("grid-template-columns", "repeat(auto-fill, minmax(200px, 1fr))")
                 .set("gap", "var(--lumo-space-s)");
 
-        List<ContractAccessory> accessories = contract.getAccessories().stream()
-                .sorted(Comparator.comparingInt(a -> a.getDisplayOrder() != null ? a.getDisplayOrder() : 0))
-                .collect(Collectors.toList());
+        // MODO EDICIÓN: Cargar TODOS los accesorios del catálogo
+        if (!isReadOnly) {
+            // Obtener todos los accesorios del catálogo activos
+            List<AccessoryCatalog> catalogAccessories = contractService.getActiveAccessories();
+            
+            // Crear un mapa de los accesorios ya asociados al contrato para saber cuáles están presentes
+            Map<Long, Boolean> contractAccessoriesMap = contract.getAccessories().stream()
+                    .collect(Collectors.toMap(
+                            ContractAccessory::getAccessoryCatalogId,
+                            acc -> acc.getIsPresent() != null ? acc.getIsPresent() : true
+                    ));
+            
+            // Mostrar todos los accesorios del catálogo
+            for (AccessoryCatalog catalogItem : catalogAccessories) {
+                HorizontalLayout row = new HorizontalLayout();
+                row.setAlignItems(FlexComponent.Alignment.CENTER);
+                row.setPadding(false);
+                row.setSpacing(true);
 
-        for (ContractAccessory acc : accessories) {
-            HorizontalLayout row = new HorizontalLayout();
-            row.setAlignItems(FlexComponent.Alignment.CENTER);
-            row.setPadding(false);
-            row.setSpacing(true);
+                Checkbox checkbox = new Checkbox(catalogItem.getName());
+                // Si el accesorio ya está en el contrato, usar su valor, sino por defecto true
+                checkbox.setValue(contractAccessoriesMap.getOrDefault(catalogItem.getId(), true));
+                checkbox.setReadOnly(false);
+                
+                // Usar el ID del catálogo como clave (no el ID del ContractAccessory)
+                accessoryCheckboxes.put(catalogItem.getId(), checkbox);
 
-            Checkbox checkbox = new Checkbox(acc.getAccessoryName());
-            checkbox.setValue(acc.getIsPresent() != null ? acc.getIsPresent() : true);
-            checkbox.setReadOnly(isReadOnly);
-            accessoryCheckboxes.put(acc.getId(), checkbox);
+                row.add(checkbox);
+                accessoriesGrid.add(row);
+            }
+        } 
+        // MODO LECTURA: Mostrar solo los accesorios asociados al contrato
+        else {
+            List<ContractAccessory> accessories = contract.getAccessories().stream()
+                    .sorted(Comparator.comparingInt(a -> a.getDisplayOrder() != null ? a.getDisplayOrder() : 0))
+                    .collect(Collectors.toList());
 
-            row.add(checkbox);
-            accessoriesGrid.add(row);
+            for (ContractAccessory acc : accessories) {
+                HorizontalLayout row = new HorizontalLayout();
+                row.setAlignItems(FlexComponent.Alignment.CENTER);
+                row.setPadding(false);
+                row.setSpacing(true);
+
+                Checkbox checkbox = new Checkbox(acc.getAccessoryName());
+                checkbox.setValue(acc.getIsPresent() != null ? acc.getIsPresent() : true);
+                checkbox.setReadOnly(true);
+                // No necesitamos guardar en el mapa en modo lectura
+
+                row.add(checkbox);
+                accessoriesGrid.add(row);
+            }
         }
 
         section.add(accessoriesGrid);
@@ -755,161 +791,215 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
     // SECCIÓN: Video del Estado del Vehículo
     // ========================================
 
-    private Div createVideoSection() {
-        Div section = createSection("ESTADO DEL VEHÍCULO - VIDEO");
+   private Div createVideoSection() {
+    Div section = createSection("ESTADO DEL VEHÍCULO - VIDEOS (3)");
 
-        Paragraph instruction = new Paragraph(
-                "Grabe o adjunte un video mostrando el estado actual del vehículo. " +
-                "El video servirá como evidencia del estado al momento de la entrega.");
-        instruction.getStyle().set("color", "var(--lumo-secondary-text-color)");
-        section.add(instruction);
+    Paragraph instruction = new Paragraph(
+            "Grabe 3 videos mostrando el estado del vehículo. " +
+            "Los videos sirven como evidencia del estado al momento de la entrega.");
+    instruction.getStyle().set("color", "var(--lumo-secondary-text-color)");
+    section.add(instruction);
 
-        // Info box con instrucciones
-        Div infoBox = new Div();
-        infoBox.getStyle()
-                .set("background", "linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%)")
-                .set("border", "1px solid #64B5F6")
+    // Info box con instrucciones
+    Div infoBox = new Div();
+    infoBox.getStyle()
+            .set("background", "linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%)")
+            .set("border", "1px solid #64B5F6")
+            .set("border-radius", "var(--lumo-border-radius-m)")
+            .set("padding", "var(--lumo-space-m)")
+            .set("margin-bottom", "var(--lumo-space-m)");
+    
+    infoBox.add(new Html(
+            "<div style='font-size: var(--lumo-font-size-s);'>" +
+            "<strong>🎥 Instrucciones para grabar los videos:</strong>" +
+            "<ul style='margin: var(--lumo-space-xs) 0; padding-left: var(--lumo-space-l);'>" +
+            "<li><strong>Video Exterior:</strong> Todos los lados del vehículo (frente, lados, trasera, techo)</li>" +
+            "<li><strong>Video Interior:</strong> Asientos, tablero, piso, consola, techo interior</li>" +
+            "<li><strong>Otros Detalles:</strong> Motor, cajuela, daños específicos, accesorios</li>" +
+            "<li>Formatos aceptados: MP4, MOV, WebM</li>" +
+            "<li>💡 Grabe desde su celular directamente para mejor calidad - SIN límite de tamaño</li>" +
+            "</ul></div>"));
+    section.add(infoBox);
+
+    if (isReadOnly) {
+        // Modo lectura: mostrar los 3 videos si existen
+        section.add(createVideoReadOnlySection("🚗 Video Exterior", 
+                contract.getVehicleExteriorVideoUrl()));
+        section.add(createVideoReadOnlySection("🪑 Video Interior", 
+                contract.getVehicleInteriorVideoUrl()));
+        section.add(createVideoReadOnlySection("🔧 Otros Detalles", 
+                contract.getVehicleDetailsVideoUrl()));
+    } else {
+        // Modo edición: permitir subir 3 videos
+        Div videosGrid = new Div();
+        videosGrid.getStyle()
+                .set("display", "grid")
+                .set("grid-template-columns", "repeat(auto-fit, minmax(280px, 1fr))")
+                .set("gap", "var(--lumo-space-m)")
+                .set("margin-top", "var(--lumo-space-m)");
+
+        videosGrid.add(
+                createVideoUploadSection("🚗 Video Exterior", "exterior", 
+                        "Grabe todos los lados del vehículo"),
+                createVideoUploadSection("🪑 Video Interior", "interior", 
+                        "Grabe el interior completo"),
+                createVideoUploadSection("🔧 Otros Detalles", "details", 
+                        "Grabe motor, cajuela, daños específicos")
+        );
+
+        section.add(videosGrid);
+
+        // Nota importante
+        Div noteBox = new Div();
+        noteBox.getStyle()
+                .set("background", "var(--lumo-contrast-5pct)")
+                .set("padding", "var(--lumo-space-s)")
                 .set("border-radius", "var(--lumo-border-radius-m)")
-                .set("padding", "var(--lumo-space-m)")
-                .set("margin-bottom", "var(--lumo-space-m)");
-        
-        infoBox.add(new Html(
-                "<div style='font-size: var(--lumo-font-size-s);'>" +
-                "<strong>🎥 Instrucciones para grabar el video:</strong>" +
-                "<ul style='margin: var(--lumo-space-xs) 0; padding-left: var(--lumo-space-l);'>" +
-                "<li>Grabe un video de <strong>30-60 segundos</strong> mostrando el exterior e interior del vehículo</li>" +
-                "<li>Incluya todos los lados del vehículo (frente, lados, trasera)</li>" +
-                "<li>Muestre el estado del interior (asientos, tablero, piso)</li>" +
-                "<li>Si hay daños existentes, enfóquelos claramente</li>" +
-                "<li>Formatos aceptados: MP4, MOV, WebM (máximo 100MB)</li>" +
-                "</ul></div>"));
-        section.add(infoBox);
-
-        if (isReadOnly) {
-            // Modo lectura: mostrar el video si existe
-            if (contract.getVehicleVideoUrl() != null && !contract.getVehicleVideoUrl().isEmpty()) {
-                Div videoContainer = new Div();
-                videoContainer.getStyle()
-                        .set("text-align", "center")
-                        .set("margin", "var(--lumo-space-m) 0");
-
-                Html video = new Html(
-                        "<video controls style='max-width: 100%; max-height: 400px; border-radius: 8px;'>" +
-                        "<source src='" + contract.getVehicleVideoUrl() + "' type='video/mp4'>" +
-                        "Su navegador no soporta el elemento de video." +
-                        "</video>");
-                videoContainer.add(video);
-
-                Anchor downloadLink = new Anchor(contract.getVehicleVideoUrl(), "Descargar video");
-                downloadLink.getElement().setAttribute("download", "");
-                downloadLink.getElement().setAttribute("target", "_blank");
-                downloadLink.getStyle().set("display", "block").set("margin-top", "var(--lumo-space-s)");
-
-                section.add(videoContainer, downloadLink);
-            } else {
-                section.add(new Paragraph("No se subió video del vehículo."));
-            }
-        } else {
-            // Modo edición: permitir subir video
-            Div uploadContainer = new Div();
-            uploadContainer.getStyle()
-                    .set("border", "2px dashed var(--lumo-contrast-30pct)")
-                    .set("border-radius", "var(--lumo-border-radius-m)")
-                    .set("padding", "var(--lumo-space-l)")
-                    .set("text-align", "center")
-                    .set("background", "var(--lumo-contrast-5pct)");
-
-            // Preview container
-            Div previewContainer = new Div();
-            previewContainer.setId("video-preview");
-            previewContainer.getStyle().set("margin-bottom", "var(--lumo-space-m)");
-
-            Span placeholderIcon = new Span("🎥");
-            placeholderIcon.getStyle().set("font-size", "3em");
-            
-            Paragraph placeholderText = new Paragraph("Arrastra un video aquí o haz clic para seleccionar");
-            placeholderText.getStyle().set("color", "var(--lumo-secondary-text-color)");
-
-            previewContainer.add(placeholderIcon, placeholderText);
-
-            // Upload component
-            MemoryBuffer buffer = new MemoryBuffer();
-            Upload upload = new Upload(buffer);
-            upload.setAcceptedFileTypes("video/mp4", "video/quicktime", "video/webm", "video/x-msvideo");
-            upload.setMaxFiles(1);
-            upload.setMaxFileSize(100 * 1024 * 1024); // 100MB
-
-            Button uploadButton = new Button("Seleccionar Video", VaadinIcon.UPLOAD.create());
-            uploadButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-            upload.setUploadButton(uploadButton);
-
-            Span dropLabel = new Span("o arrastra el archivo aquí");
-            dropLabel.getStyle().set("color", "var(--lumo-secondary-text-color)");
-            upload.setDropLabel(dropLabel);
-
-            // Status display
-            Div statusDiv = new Div();
-            statusDiv.setId("upload-status");
-            statusDiv.getStyle().set("margin-top", "var(--lumo-space-m)");
-
-            upload.addSucceededListener(event -> {
-                try {
-                    String fileName = event.getFileName();
-                    String mimeType = event.getMIMEType();
-                    InputStream inputStream = buffer.getInputStream();
-
-                    // Subir el video directamente al servicio
-                    contractService.uploadVehicleVideo(token, inputStream, fileName, mimeType);
-
-                    // Actualizar UI
-                    previewContainer.removeAll();
-                    Span successIcon = new Span("✅");
-                    successIcon.getStyle().set("font-size", "2em");
-                    Paragraph successText = new Paragraph("Video subido: " + fileName);
-                    successText.getStyle().set("color", "var(--lumo-success-color)");
-                    previewContainer.add(successIcon, successText);
-
-                    vehicleVideoUrl = "uploaded"; // Marcar como subido
-
-                    Notification.show("✅ Video subido exitosamente", 3000, Notification.Position.TOP_CENTER)
-                            .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-
-                } catch (Exception e) {
-                    log.error("Error subiendo video: {}", e.getMessage(), e);
-                    Notification.show("Error al subir video: " + e.getMessage(), 5000, Notification.Position.MIDDLE)
-                            .addThemeVariants(NotificationVariant.LUMO_ERROR);
-                }
-            });
-
-            upload.addFileRejectedListener(event -> {
-                Notification.show("Archivo rechazado: " + event.getErrorMessage(), 4000, Notification.Position.MIDDLE)
-                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
-            });
-
-            upload.addFailedListener(event -> {
-                Notification.show("Error al cargar: " + event.getReason().getMessage(), 4000, Notification.Position.MIDDLE)
-                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
-            });
-
-            uploadContainer.add(previewContainer, upload, statusDiv);
-            section.add(uploadContainer);
-
-            // Nota importante
-            Div noteBox = new Div();
-            noteBox.getStyle()
-                    .set("background", "var(--lumo-contrast-5pct)")
-                    .set("padding", "var(--lumo-space-s)")
-                    .set("border-radius", "var(--lumo-border-radius-m)")
-                    .set("margin-top", "var(--lumo-space-m)")
-                    .set("font-size", "var(--lumo-font-size-s)");
-            noteBox.add(new Html(
-                    "<div><strong>⚠️ Importante:</strong> El video es evidencia del estado del vehículo al momento de la entrega. " +
-                    "Asegúrese de que el video muestre claramente cualquier daño preexistente.</div>"));
-            section.add(noteBox);
-        }
-
-        return section;
+                .set("margin-top", "var(--lumo-space-m)")
+                .set("font-size", "var(--lumo-font-size-s)");
+        noteBox.add(new Html(
+                "<div><strong>⚠️ Importante:</strong> Los videos son evidencia oficial del estado del vehículo. " +
+                "Asegúrese de grabar claramente cualquier daño preexistente en cada área.</div>"));
+        section.add(noteBox);
     }
+
+    return section;
+}
+
+private VerticalLayout createVideoReadOnlySection(String title, String videoUrl) {
+    VerticalLayout layout = new VerticalLayout();
+    layout.setPadding(false);
+    layout.setSpacing(true);
+
+    H4 videoTitle = new H4(title);
+    videoTitle.getStyle().set("margin", "var(--lumo-space-s) 0");
+    layout.add(videoTitle);
+
+    if (videoUrl != null && !videoUrl.isEmpty()) {
+        Div videoContainer = new Div();
+        videoContainer.getStyle()
+                .set("text-align", "center")
+                .set("margin", "var(--lumo-space-m) 0");
+
+        Html video = new Html(
+                "<video controls style='max-width: 100%; max-height: 300px; border-radius: 8px;'>" +
+                "<source src='" + videoUrl + "' type='video/mp4'>" +
+                "Su navegador no soporta el elemento de video." +
+                "</video>");
+        videoContainer.add(video);
+
+        Anchor downloadLink = new Anchor(videoUrl, "⬇️ Descargar");
+        downloadLink.getElement().setAttribute("download", "");
+        downloadLink.getElement().setAttribute("target", "_blank");
+        downloadLink.getStyle()
+                .set("display", "inline-block")
+                .set("margin-top", "var(--lumo-space-s)");
+
+        layout.add(videoContainer, downloadLink);
+    } else {
+        Paragraph noVideo = new Paragraph("No se subió este video");
+        noVideo.getStyle().set("color", "var(--lumo-secondary-text-color)");
+        layout.add(noVideo);
+    }
+
+    return layout;
+}
+
+private VerticalLayout createVideoUploadSection(String title, String videoType, String hint) {
+    VerticalLayout layout = new VerticalLayout();
+    layout.setPadding(true);
+    layout.setSpacing(true);
+    layout.getStyle()
+            .set("border", "2px dashed var(--lumo-contrast-30pct)")
+            .set("border-radius", "var(--lumo-border-radius-m)")
+            .set("background", "var(--lumo-contrast-5pct)");
+
+    H4 videoTitle = new H4(title);
+    videoTitle.getStyle().set("margin", "0 0 var(--lumo-space-s) 0");
+
+    Paragraph hintText = new Paragraph(hint);
+    hintText.getStyle()
+            .set("font-size", "var(--lumo-font-size-s)")
+            .set("color", "var(--lumo-secondary-text-color)")
+            .set("margin", "0 0 var(--lumo-space-m) 0");
+
+    // Preview container
+    Div previewContainer = new Div();
+    previewContainer.setId("video-preview-" + videoType);
+    previewContainer.getStyle()
+            .set("text-align", "center")
+            .set("margin-bottom", "var(--lumo-space-m)");
+
+    Span placeholderIcon = new Span("🎥");
+    placeholderIcon.getStyle().set("font-size", "2.5em");
+    
+    Paragraph placeholderText = new Paragraph("Selecciona el video");
+    placeholderText.getStyle()
+            .set("font-size", "var(--lumo-font-size-s)")
+            .set("color", "var(--lumo-secondary-text-color)");
+
+    previewContainer.add(placeholderIcon, placeholderText);
+
+    // Upload component
+    MemoryBuffer buffer = new MemoryBuffer();
+    Upload upload = new Upload(buffer);
+    upload.setAcceptedFileTypes("video/mp4", "video/quicktime", "video/webm", "video/x-msvideo");
+    upload.setMaxFiles(1);
+    // SIN LÍMITE - 500MB es suficiente para la mayoría de videos desde celular
+    upload.setMaxFileSize(500 * 1024 * 1024); // 500MB
+
+    Button uploadButton = new Button("Seleccionar", VaadinIcon.UPLOAD.create());
+    uploadButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_PRIMARY);
+    upload.setUploadButton(uploadButton);
+    upload.setDropAllowed(false);
+
+    upload.addSucceededListener(event -> {
+        try {
+            String fileName = event.getFileName();
+            String mimeType = event.getMIMEType();
+            InputStream inputStream = buffer.getInputStream();
+
+            // Subir el video según el tipo
+            contractService.uploadVehicleVideo(token, inputStream, fileName, mimeType, videoType);
+
+            // Actualizar UI
+            previewContainer.removeAll();
+            Span successIcon = new Span("✅");
+            successIcon.getStyle().set("font-size", "2em");
+            Paragraph successText = new Paragraph("Video subido: " + fileName);
+            successText.getStyle()
+                    .set("font-size", "var(--lumo-font-size-s)")
+                    .set("color", "var(--lumo-success-color)");
+            previewContainer.add(successIcon, successText);
+
+            // Marcar como subido
+            switch (videoType) {
+                case "exterior" -> vehicleExteriorVideoUrl = "uploaded";
+                case "interior" -> vehicleInteriorVideoUrl = "uploaded";
+                case "details" -> vehicleDetailsVideoUrl = "uploaded";
+            }
+
+            Notification.show("✅ " + title + " subido exitosamente", 
+                    3000, Notification.Position.TOP_CENTER)
+                    .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+
+        } catch (Exception e) {
+            log.error("Error subiendo video {}: {}", videoType, e.getMessage(), e);
+            Notification.show("Error al subir " + title + ": " + e.getMessage(), 
+                    5000, Notification.Position.MIDDLE)
+                    .addThemeVariants(NotificationVariant.LUMO_ERROR);
+        }
+    });
+
+    upload.addFileRejectedListener(event -> {
+        Notification.show(title + " rechazado: " + event.getErrorMessage(), 
+                4000, Notification.Position.MIDDLE)
+                .addThemeVariants(NotificationVariant.LUMO_ERROR);
+    });
+
+    layout.add(videoTitle, hintText, previewContainer, upload);
+    return layout;
+}
 
     // ========================================
     // SECCIÓN: Términos y Condiciones
@@ -1300,8 +1390,14 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         }
 
         // Cargar URL del video si existe
-        if (contract.getVehicleVideoUrl() != null) {
-            vehicleVideoUrl = contract.getVehicleVideoUrl();
+        if (contract.getVehicleExteriorVideoUrl() != null) {
+            vehicleExteriorVideoUrl = contract.getVehicleExteriorVideoUrl();
+        }
+        if (contract.getVehicleInteriorVideoUrl() != null) {
+            vehicleInteriorVideoUrl = contract.getVehicleInteriorVideoUrl();
+        }
+        if (contract.getVehicleDetailsVideoUrl() != null) {
+            vehicleDetailsVideoUrl = contract.getVehicleDetailsVideoUrl();
         }
     }
 

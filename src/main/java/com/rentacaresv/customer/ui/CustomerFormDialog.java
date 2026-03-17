@@ -19,7 +19,7 @@ import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
-import com.vaadin.flow.component.textfield.EmailField;
+// import com.vaadin.flow.component.textfield.EmailField; // Removido por problemas en Safari
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.binder.BeanValidationBinder;
@@ -42,7 +42,7 @@ public class CustomerFormDialog extends Dialog {
     private TextField fullName;
     private ComboBox<DocumentType> documentType;
     private TextField documentNumber;
-    private EmailField email;
+    private TextField email;
     private TextField phone;
     private TextArea address;
     private DatePicker birthDate;
@@ -132,10 +132,14 @@ public class CustomerFormDialog extends Dialog {
         driverLicenseExpiry.setHelperText("Informativo - no bloquea rentas");
         
         // Información de contacto
-        email = new EmailField("Email");
+        email = new TextField("Email");
         email.setPlaceholder("cliente@ejemplo.com");
         email.setMaxLength(100);
         email.setClearButtonVisible(true);
+        // Validación de email más permisiva para Safari (acepta números)
+        email.setPattern("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}");
+        email.setErrorMessage("Formato de email inválido");
+        email.setHelperText("Ej: usuario@dominio.com o usuario123@dominio.com");
         
         phone = new TextField("Teléfono");
         phone.setPlaceholder("Ej: 7123-4567");
