@@ -342,77 +342,68 @@ public class ContractPdfGenerator {
     }
 
     // ========================================
-    // VIDEO DEL ESTADO DEL VEHÍCULO
+    // VIDEOS DEL ESTADO DEL VEHÍCULO (3 videos)
     // ========================================
     private void addDamagesDiagramSection(Document document, Contract contract, Vehicle vehicle) {
-        document.add(createSectionTitle("ESTADO DEL VEHÍCULO - VIDEO"));
+        document.add(createSectionTitle("ESTADO DEL VEHÍCULO - VIDEOS"));
 
-        Table videoTable = new Table(1);
-        videoTable.setWidth(UnitValue.createPercentValue(100));
+        // Verificar cuáles videos existen
+        String exteriorUrl = contract.getVehicleExteriorVideoUrl();
+        String interiorUrl = contract.getVehicleInteriorVideoUrl();
+        String detailsUrl = contract.getVehicleDetailsVideoUrl();
+        String legacyUrl = contract.getVehicleVideoUrl();
         
-        Cell videoCell = new Cell()
-                .setBorder(new SolidBorder(BORDER_COLOR, 1))
-                .setPadding(15)
-                .setTextAlignment(TextAlignment.CENTER);
+        boolean hasAnyVideo = (exteriorUrl != null && !exteriorUrl.isEmpty()) ||
+                             (interiorUrl != null && !interiorUrl.isEmpty()) ||
+                             (detailsUrl != null && !detailsUrl.isEmpty()) ||
+                             (legacyUrl != null && !legacyUrl.isEmpty());
 
-        // Verificar si hay video del vehículo
-        String videoUrl = contract.getVehicleVideoUrl();
-        
-        if (videoUrl != null && !videoUrl.isEmpty()) {
-            // Hay video - mostrar icono y enlace
-            videoCell.add(new Paragraph("🎥")
-                    .setFontSize(24)
-                    .setTextAlignment(TextAlignment.CENTER));
+        if (hasAnyVideo) {
+            // Crear tabla con 3 columnas para los 3 videos
+            Table videosTable = new Table(new float[]{1, 1, 1});
+            videosTable.setWidth(UnitValue.createPercentValue(100));
             
-            videoCell.add(new Paragraph("VIDEO DEL ESTADO DEL VEHÍCULO")
-                    .setBold()
-                    .setFontSize(FONT_SUBTITLE)
-                    .setFontColor(PRIMARY_COLOR)
-                    .setTextAlignment(TextAlignment.CENTER));
+            // Video Exterior
+            videosTable.addCell(createVideoCell("🚗 EXTERIOR", exteriorUrl != null ? exteriorUrl : legacyUrl));
             
-            videoCell.add(new Paragraph("Se grabó un video mostrando el estado del vehículo al momento de la entrega.")
-                    .setFontSize(FONT_SMALL)
-                    .setTextAlignment(TextAlignment.CENTER)
-                    .setMarginTop(5));
+            // Video Interior
+            videosTable.addCell(createVideoCell("🪑 INTERIOR", interiorUrl));
             
-            // Link al video
-            videoCell.add(new Paragraph()
-                    .setMarginTop(10)
-                    .add(new Text("Ver video: ").setFontSize(FONT_SMALL))
-                    .add(new Text(videoUrl)
-                            .setFontSize(FONT_SMALL)
-                            .setFontColor(new DeviceRgb(0, 102, 204))
-                            .setUnderline()));
+            // Video Otros Detalles
+            videosTable.addCell(createVideoCell("🔧 OTROS DETALLES", detailsUrl));
             
-            videoCell.add(new Paragraph("(Copie y pegue el enlace en su navegador para ver el video)")
-                    .setFontSize(7)
-                    .setItalic()
-                    .setFontColor(new DeviceRgb(120, 120, 120))
-                    .setTextAlignment(TextAlignment.CENTER)
-                    .setMarginTop(3));
+            document.add(videosTable);
             
         } else {
-            // No hay video
-            videoCell.add(new Paragraph("📹")
+            // No hay videos
+            Table videoTable = new Table(1);
+            videoTable.setWidth(UnitValue.createPercentValue(100));
+            
+            Cell noVideoCell = new Cell()
+                    .setBorder(new SolidBorder(BORDER_COLOR, 1))
+                    .setPadding(15)
+                    .setTextAlignment(TextAlignment.CENTER);
+            
+            noVideoCell.add(new Paragraph("📹")
                     .setFontSize(20)
                     .setFontColor(new DeviceRgb(150, 150, 150))
                     .setTextAlignment(TextAlignment.CENTER));
             
-            videoCell.add(new Paragraph("VIDEO NO DISPONIBLE")
+            noVideoCell.add(new Paragraph("VIDEOS NO DISPONIBLES")
                     .setFontSize(FONT_NORMAL)
                     .setItalic()
                     .setFontColor(new DeviceRgb(150, 150, 150))
                     .setTextAlignment(TextAlignment.CENTER));
             
-            videoCell.add(new Paragraph("No se grabó video del estado del vehículo para este contrato.")
+            noVideoCell.add(new Paragraph("No se grabaron videos del estado del vehículo para este contrato.")
                     .setFontSize(FONT_SMALL)
                     .setFontColor(new DeviceRgb(150, 150, 150))
                     .setTextAlignment(TextAlignment.CENTER)
                     .setMarginTop(5));
+            
+            videoTable.addCell(noVideoCell);
+            document.add(videoTable);
         }
-
-        videoTable.addCell(videoCell);
-        document.add(videoTable);
         
         // Nota informativa
         Table noteTable = new Table(1);
@@ -426,13 +417,73 @@ public class ContractPdfGenerator {
         noteCell.add(new Paragraph("IMPORTANTE:")
                 .setBold()
                 .setFontSize(FONT_SMALL));
-        noteCell.add(new Paragraph("El video adjunto constituye evidencia del estado del vehículo al momento de la entrega. " +
-                "Cualquier daño no visible en el video y encontrado durante la devolución será responsabilidad del arrendatario.")
+        noteCell.add(new Paragraph("Los videos adjuntos constituyen evidencia del estado del vehículo al momento de la entrega. " +
+                "Cualquier daño no visible en los videos y encontrado durante la devolución será responsabilidad del arrendatario.")
                 .setFontSize(FONT_SMALL));
         noteTable.addCell(noteCell);
         document.add(noteTable);
         
         document.add(new Paragraph().setMarginBottom(8));
+    }
+    
+    /**
+     * Crea una celda de video individual
+     */
+    private Cell createVideoCell(String title, String videoUrl) {
+        Cell cell = new Cell()
+                .setBorder(new SolidBorder(BORDER_COLOR, 1))
+                .setPadding(10)
+                .setTextAlignment(TextAlignment.CENTER);
+        
+        if (videoUrl != null && !videoUrl.isEmpty()) {
+            // Hay video
+            cell.add(new Paragraph(title)
+                    .setBold()
+                    .setFontSize(FONT_SMALL)
+                    .setFontColor(PRIMARY_COLOR)
+                    .setTextAlignment(TextAlignment.CENTER));
+            
+            cell.add(new Paragraph("🎥")
+                    .setFontSize(18)
+                    .setTextAlignment(TextAlignment.CENTER)
+                    .setMarginTop(5));
+            
+            cell.add(new Paragraph("Video disponible")
+                    .setFontSize(7)
+                    .setFontColor(SUCCESS_COLOR)
+                    .setTextAlignment(TextAlignment.CENTER));
+            
+            // Link al video (acortado para que quepa)
+            String shortUrl = videoUrl.length() > 40 ? videoUrl.substring(0, 37) + "..." : videoUrl;
+            cell.add(new Paragraph(shortUrl)
+                    .setFontSize(6)
+                    .setFontColor(new DeviceRgb(0, 102, 204))
+                    .setUnderline()
+                    .setTextAlignment(TextAlignment.CENTER)
+                    .setMarginTop(5));
+            
+        } else {
+            // No hay video
+            cell.add(new Paragraph(title)
+                    .setBold()
+                    .setFontSize(FONT_SMALL)
+                    .setFontColor(new DeviceRgb(150, 150, 150))
+                    .setTextAlignment(TextAlignment.CENTER));
+            
+            cell.add(new Paragraph("🚫")
+                    .setFontSize(18)
+                    .setFontColor(new DeviceRgb(150, 150, 150))
+                    .setTextAlignment(TextAlignment.CENTER)
+                    .setMarginTop(5));
+            
+            cell.add(new Paragraph("No disponible")
+                    .setFontSize(7)
+                    .setItalic()
+                    .setFontColor(new DeviceRgb(150, 150, 150))
+                    .setTextAlignment(TextAlignment.CENTER));
+        }
+        
+        return cell;
     }
 
     // ========================================

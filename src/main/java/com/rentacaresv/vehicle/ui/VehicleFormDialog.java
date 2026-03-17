@@ -842,7 +842,8 @@ public class VehicleFormDialog extends Dialog {
 
     private void populateForm(VehicleDTO vehicle) {
         licensePlate.setValue(vehicle.getLicensePlate());
-        licensePlate.setReadOnly(true);
+        // Permitir editar la placa en caso de errores de ingreso
+        // licensePlate.setReadOnly(true);
 
         // Buscar marca en el catálogo o crear una temporal
         VehicleBrandDTO brandDTO = allBrands.stream()

@@ -149,16 +149,32 @@ public class Contract {
     private String vehicleDiagramUrl;
 
     /**
-     * URL del video del estado del vehículo al momento de la entrega
+     * URL del video del EXTERIOR del vehículo al momento de la entrega
      */
-    @Column(name = "vehicle_video_url", length = 500)
-    private String vehicleVideoUrl;
+    @Column(name = "vehicle_exterior_video_url", length = 500)
+    private String vehicleExteriorVideoUrl;
+
+    /**
+     * URL del video del INTERIOR del vehículo al momento de la entrega
+     */
+    @Column(name = "vehicle_interior_video_url", length = 500)
+    private String vehicleInteriorVideoUrl;
+
+    /**
+     * URL del video de OTROS DETALLES del vehículo al momento de la entrega
+     */
+    @Column(name = "vehicle_details_video_url", length = 500)
+    private String vehicleDetailsVideoUrl;
 
     /**
      * URL del video del estado del vehículo al momento de la devolución
      */
     @Column(name = "vehicle_return_video_url", length = 500)
     private String vehicleReturnVideoUrl;
+
+    // LEGACY - campo antiguo, mantener para compatibilidad
+    @Column(name = "vehicle_video_url", length = 500)
+    private String vehicleVideoUrl;
 
     // ========================================
     // Información del vehículo al momento del contrato
