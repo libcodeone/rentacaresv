@@ -27,7 +27,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@ToString(exclude = {"rental", "accessories", "damageMarks"})
+@ToString(exclude = { "rental", "accessories" })
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class Contract {
 
@@ -334,13 +334,6 @@ public class Contract {
     @Builder.Default
     private Set<ContractAccessory> accessories = new HashSet<>();
 
-    /**
-     * Lista de marcas de daños en el vehículo
-     */
-    @OneToMany(mappedBy = "contract", cascade = CascadeType.ALL, orphanRemoval = true)
-    @Builder.Default
-    private Set<ContractDamageMark> damageMarks = new HashSet<>();
-
     // ========================================
     // Auditoría
     // ========================================
@@ -403,8 +396,7 @@ public class Contract {
     public void sign(String signatureUrl, String ipAddress, String userAgent) {
         if (!canBeSigned()) {
             throw new IllegalStateException(
-                "El contrato no puede ser firmado. Estado: " + status + ", Expirado: " + isExpired()
-            );
+                    "El contrato no puede ser firmado. Estado: " + status + ", Expirado: " + isExpired());
         }
 
         this.signatureUrl = signatureUrl;
@@ -421,8 +413,7 @@ public class Contract {
     public void cancel() {
         if (!status.canBeCancelled()) {
             throw new IllegalStateException(
-                "El contrato no puede ser cancelado. Estado actual: " + status
-            );
+                    "El contrato no puede ser cancelado. Estado actual: " + status);
         }
         this.status = ContractStatus.CANCELLED;
         this.updatedAt = LocalDateTime.now();
@@ -444,14 +435,6 @@ public class Contract {
     public void addAccessory(ContractAccessory accessory) {
         accessories.add(accessory);
         accessory.setContract(this);
-    }
-
-    /**
-     * Agrega una marca de daño al contrato
-     */
-    public void addDamageMark(ContractDamageMark damageMark) {
-        damageMarks.add(damageMark);
-        damageMark.setContract(this);
     }
 
     /**
