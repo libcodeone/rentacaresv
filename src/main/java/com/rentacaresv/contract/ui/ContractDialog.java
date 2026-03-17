@@ -203,7 +203,15 @@ public class ContractDialog extends Dialog {
         editBtn.setWidthFull();
         editBtn.addClickListener(e -> {
             String contractUrl = getBaseUrl() + "/public/contract/" + contract.getToken();
-            UI.getCurrent().getPage().open(contractUrl, "_blank");
+            // Usar executeJs para mejor compatibilidad con Safari
+            UI.getCurrent().getPage().executeJs(
+                "const url = $0;" +
+                "const newWindow = window.open(url, '_blank');" +
+                "if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {" +
+                "  window.location.href = url;" + // Fallback si se bloquea el popup
+                "}",
+                contractUrl
+            );
         });
 
         // URL del contrato (para copiar/compartir)
