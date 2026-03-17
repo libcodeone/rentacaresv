@@ -65,10 +65,21 @@ public class RentalService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Cliente no encontrado con ID: " + command.getCustomerId()));
 
-        // 2. Validar disponibilidad del vehículo
+        // 2. Validar disponibilidad del vehículo (estado general)
         if (!vehicle.isAvailable()) {
             throw new IllegalStateException(
                     "El vehículo " + vehicle.getLicensePlate() + " no está disponible");
+        }
+
+        // 2.1. Validar disponibilidad del vehículo en las fechas solicitadas
+        if (rentalRepository.hasConflictingRentals(
+                command.getVehicleId(),
+                command.getStartDate(),
+                command.getEndDate())) {
+            throw new IllegalStateException(
+                    "El vehículo " + vehicle.getLicensePlate() + 
+                    " ya está rentado entre las fechas seleccionadas. " +
+                    "Por favor selecciona otras fechas.");
         }
 
         // 3. Validar que el cliente esté activo
@@ -461,6 +472,16 @@ public class RentalService {
         return rentals.stream()
                 .map(this::mapToCalendarEvent)
                 .toList();
+    }
+
+    /**
+     * Obtiene todas las rentas activas o pendientes de un vehículo
+     * (para mostrar fechas ocupadas en el calendario de reservas)
+     */
+    @Transactional(readOnly = true)
+    public List<RentalDTO> findActiveRentalsByVehicleId(Long vehicleId) {
+        List<Rental> rentals = rentalRepository.findActiveRentalsByVehicleId(vehicleId);
+        return rentalMapper.toDTOList(rentals);
     }
 
     /**

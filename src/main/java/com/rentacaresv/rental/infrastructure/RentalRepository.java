@@ -159,4 +159,53 @@ public interface RentalRepository extends JpaRepository<Rental, Long>, JpaSpecif
      */
     @Query("SELECT COUNT(r) FROM Rental r WHERE r.status = 'COMPLETED' AND CAST(r.actualReturnDate AS LocalDate) BETWEEN :startDate AND :endDate AND r.deletedAt IS NULL")
     long countCompletedBetweenDates(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+
+    /**
+     * Verifica si un vehículo tiene rentas activas o pendientes en un rango de fechas
+     * Detecta solapamiento de fechas: una nueva renta (newStart, newEnd) solapa con una existente si:
+     * - La nueva renta empieza antes de que termine la existente Y
+     * - La nueva renta termina después de que empiece la existente
+     * 
+     * Lógica: newStart < existingEnd AND newEnd > existingStart
+     */
+    @Query("SELECT COUNT(r) > 0 FROM Rental r " +
+           "WHERE r.vehicle.id = :vehicleId " +
+           "AND r.status IN ('PENDING', 'ACTIVE') " +
+           "AND r.deletedAt IS NULL " +
+           "AND r.startDate < :endDate " +
+           "AND r.endDate > :startDate")
+    boolean hasConflictingRentals(
+        @Param("vehicleId") Long vehicleId,
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate
+    );
+
+    /**
+     * Verifica si un vehículo tiene rentas activas o pendientes en un rango de fechas,
+     * excluyendo una renta específica (útil para ediciones)
+     */
+    @Query("SELECT COUNT(r) > 0 FROM Rental r " +
+           "WHERE r.vehicle.id = :vehicleId " +
+           "AND r.id != :excludeRentalId " +
+           "AND r.status IN ('PENDING', 'ACTIVE') " +
+           "AND r.deletedAt IS NULL " +
+           "AND r.startDate < :endDate " +
+           "AND r.endDate > :startDate")
+    boolean hasConflictingRentalsExcluding(
+        @Param("vehicleId") Long vehicleId,
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate,
+        @Param("excludeRentalId") Long excludeRentalId
+    );
+
+    /**
+     * Obtiene todas las rentas activas o pendientes de un vehículo
+     * (para mostrar fechas ocupadas en el calendario)
+     */
+    @Query("SELECT r FROM Rental r " +
+           "WHERE r.vehicle.id = :vehicleId " +
+           "AND r.status IN ('PENDING', 'ACTIVE') " +
+           "AND r.deletedAt IS NULL " +
+           "ORDER BY r.startDate ASC")
+    List<Rental> findActiveRentalsByVehicleId(@Param("vehicleId") Long vehicleId);
 }
