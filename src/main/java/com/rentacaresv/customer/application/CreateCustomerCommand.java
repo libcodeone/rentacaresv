@@ -38,6 +38,8 @@ public class CreateCustomerCommand {
 
     private String address;
 
+    private String addressForeign;
+
     @Past(message = "La fecha de nacimiento debe ser en el pasado")
     private LocalDate birthDate;
 

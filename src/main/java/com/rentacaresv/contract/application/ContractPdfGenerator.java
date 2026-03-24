@@ -200,9 +200,11 @@ public class ContractPdfGenerator {
         String phoneUSA = contract.getPhoneUsa() != null ? contract.getPhoneUsa() : "-";
         addCell(table, "Tel. USA:", phoneUSA, 1);
 
-        // Fila 3: Dirección extranjero (si existe)
-        if (contract.getAddressForeign() != null && !contract.getAddressForeign().isEmpty()) {
-            addCell(table, "Dir. Extranjero:", contract.getAddressForeign(), 4);
+        // Fila 3: Dirección extranjero
+        String addressForeign = contract.getAddressForeign() != null ? contract.getAddressForeign() : 
+                               (customer.getAddressForeign() != null ? customer.getAddressForeign() : null);
+        if (addressForeign != null && !addressForeign.isEmpty()) {
+            addCell(table, "Dir. Extranjero:", addressForeign, 4);
         }
 
         document.add(table);
