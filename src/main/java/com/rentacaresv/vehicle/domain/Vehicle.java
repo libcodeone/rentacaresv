@@ -93,6 +93,14 @@ public class Vehicle {
     @Builder.Default
     private VehicleStatus status = VehicleStatus.AVAILABLE;
 
+    /**
+     * Indica si el vehículo se muestra en la página web pública.
+     * Permite ocultar vehículos sin cambiar su estado operativo.
+     */
+    @Column(name = "published_on_web", nullable = false)
+    @Builder.Default
+    private Boolean publishedOnWeb = true;
+
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
