@@ -14,7 +14,9 @@ import com.vaadin.flow.component.ComponentEventListener;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
-import com.vaadin.flow.component.datepicker.DatePicker;
+
+import com.rentacaresv.shared.ui.ModernDateRangePicker;
+import com.rentacaresv.shared.ui.DateRange;
 import com.vaadin.flow.component.details.Details;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
@@ -68,8 +70,7 @@ public class RentalFormDialog extends Dialog {
     // Campos básicos del formulario
     private ComboBox<VehicleDTO> vehicleCombo;
     private ComboBox<CustomerDTO> customerCombo;
-    private DatePicker startDate;
-    private DatePicker endDate;
+    private ModernDateRangePicker dateRangePicker;
     private TextArea notes;
 
     // Panel de preview del vehículo
@@ -186,30 +187,8 @@ public class RentalFormDialog extends Dialog {
         // Fechas
         // ========================================
 
-        startDate = new DatePicker("Fecha de Inicio");
-        startDate.setLocale(new Locale("es", "SV"));
-        startDate.setMin(LocalDate.now());
-        startDate.setRequired(true);
-        startDate.addValueChangeListener(e -> {
-            if (e.getValue() != null) {
-                endDate.setMin(e.getValue().plusDays(1));
-            }
-            calculatePrice();
-        });
-
-        endDate = new DatePicker("Fecha de Fin");
-        endDate.setLocale(new Locale("es", "SV"));
-        endDate.setMin(LocalDate.now().plusDays(1));
-        endDate.setRequired(true);
-        endDate.addValueChangeListener(e -> {
-            if (startDate.getValue() != null && e.getValue() != null) {
-                if (e.getValue().isBefore(startDate.getValue()) || e.getValue().isEqual(startDate.getValue())) {
-                    endDate.setInvalid(true);
-                    endDate.setErrorMessage("Debe ser posterior a la fecha de inicio");
-                } else {
-                    endDate.setInvalid(false);
-                }
-            }
+        dateRangePicker = new ModernDateRangePicker("Fechas de Renta");
+        dateRangePicker.addValueChangeListener(e -> {
             calculatePrice();
         });
 
@@ -250,7 +229,7 @@ public class RentalFormDialog extends Dialog {
 
         basicFormLayout.add(vehicleCombo, 2);
         basicFormLayout.add(customerCombo, 2);
-        basicFormLayout.add(startDate, endDate);
+        basicFormLayout.add(dateRangePicker, 2);
         basicFormLayout.add(unavailableDatesMessage, 2);
         basicFormLayout.add(notes, 2);
 
@@ -325,8 +304,22 @@ public class RentalFormDialog extends Dialog {
                                 .orElse(null))
                 .bind("customerId");
 
-        binder.forField(startDate).bind("startDate");
-        binder.forField(endDate).bind("endDate");
+        binder.forField(dateRangePicker)
+                .withValidator(v -> v != null && v.getStartDate() != null && v.getEndDate() != null,
+                        "Debe seleccionar un rango de fechas completo")
+                .bind(
+                        c -> (c.getStartDate() != null && c.getEndDate() != null)
+                                ? new DateRange(c.getStartDate(), c.getEndDate())
+                                : null,
+                        (c, range) -> {
+                            if (range != null) {
+                                c.setStartDate(range.getStartDate());
+                                c.setEndDate(range.getEndDate());
+                            } else {
+                                c.setStartDate(null);
+                                c.setEndDate(null);
+                            }
+                        });
         binder.forField(notes).bind("notes");
 
         // Binding campos de viaje (opcionales)
@@ -505,36 +498,26 @@ public class RentalFormDialog extends Dialog {
     private void updateDisabledDates(VehicleDTO vehicle) {
         if (vehicle == null) {
             // Limpiar fechas deshabilitadas
-            startDate.setEnabled(true);
-            endDate.setEnabled(true);
+            dateRangePicker.setEnabled(true);
             unavailableDatesMessage.setVisible(false);
-
-            // Limpiar JS de bloqueo de fechas
-            startDate.getElement().executeJs(
-                    "this.isDateDisabled = false; if (this.requestContentUpdate) this.requestContentUpdate();");
-            endDate.getElement().executeJs(
-                    "this.isDateDisabled = false; if (this.requestContentUpdate) this.requestContentUpdate();");
+            dateRangePicker.setDisabledDates(new ArrayList<>());
             return;
         }
 
         // Obtener rentas activas/pendientes del vehículo
         List<RentalDTO> activeRentals = rentalService.findActiveRentalsByVehicleId(vehicle.getId());
-        
-        // Filtrar solo rentas futuras o que terminen en el futuro (ignorar rentas pasadas completas)
+
+        // Filtrar solo rentas futuras o que terminen en el futuro (ignorar rentas
+        // pasadas completas)
         LocalDate today = LocalDate.now();
         activeRentals = activeRentals.stream()
-            .filter(rental -> !rental.getEndDate().isBefore(today))  // Solo si terminan hoy o en el futuro
-            .collect(Collectors.toList());
+                .filter(rental -> !rental.getEndDate().isBefore(today)) // Solo si terminan hoy o en el futuro
+                .collect(Collectors.toList());
 
         if (activeRentals.isEmpty()) {
             // No hay rentas, todas las fechas disponibles
             unavailableDatesMessage.setVisible(false);
-
-            // Limpiar JS de bloqueo de fechas
-            startDate.getElement().executeJs(
-                    "this.isDateDisabled = false; if (this.requestContentUpdate) this.requestContentUpdate();");
-            endDate.getElement().executeJs(
-                    "this.isDateDisabled = false; if (this.requestContentUpdate) this.requestContentUpdate();");
+            dateRangePicker.setDisabledDates(new ArrayList<>());
             return;
         }
 
@@ -554,43 +537,36 @@ public class RentalFormDialog extends Dialog {
 
         // Bloqueo visual de fechas ocupadas inyectando Javascript (Vaadin Flow
         // DatePicker workaround)
-        String jsDatesArray = disabledDates.stream()
-                .map(d -> "'" + d.toString() + "'")
-                .collect(Collectors.joining(",", "[", "]"));
 
-        String jsFunction = "const disabled = " + jsDatesArray + ";" +
-                "this.isDateDisabled = function(date) {" +
-                "    if (!date) return false;" +
-                "    const month = (date.month + 1).toString().padStart(2, '0');" +
-                "    const day = date.day.toString().padStart(2, '0');" +
-                "    const dateString = date.year + '-' + month + '-' + day;" +
-                "    return disabled.includes(dateString);" +
-                "};" +
-                "if (this.requestContentUpdate) this.requestContentUpdate();";
+        // En lugar de manual javascript form, empujamos al Java Wrapper
+        dateRangePicker.setDisabledDates(disabledDates);
 
-        startDate.getElement().executeJs(jsFunction);
-        endDate.getElement().executeJs(jsFunction);
+        dateRangePicker.addValueChangeListener(event -> {
+            DateRange selected = event.getValue();
+            if (selected != null) {
+                boolean invalid = false;
+                if (selected.getStartDate() != null && disabledDates.contains(selected.getStartDate()))
+                    invalid = true;
+                if (selected.getEndDate() != null && disabledDates.contains(selected.getEndDate()))
+                    invalid = true;
 
-        // Mantener validacion en backend como fallback (custom validator + helper)
+                if (!invalid && selected.getStartDate() != null && selected.getEndDate() != null) {
+                    LocalDate curr = selected.getStartDate();
+                    while (!curr.isAfter(selected.getEndDate())) {
+                        if (disabledDates.contains(curr)) {
+                            invalid = true;
+                            break;
+                        }
+                        curr = curr.plusDays(1);
+                    }
+                }
 
-        // Crear validator que rechace fechas ocupadas
-        startDate.addValueChangeListener(event -> {
-            LocalDate selected = event.getValue();
-            if (selected != null && disabledDates.contains(selected)) {
-                startDate.setInvalid(true);
-                startDate.setErrorMessage("Esta fecha no está disponible. El vehículo ya está rentado.");
-            } else {
-                startDate.setInvalid(false);
-            }
-        });
-
-        endDate.addValueChangeListener(event -> {
-            LocalDate selected = event.getValue();
-            if (selected != null && disabledDates.contains(selected)) {
-                endDate.setInvalid(true);
-                endDate.setErrorMessage("Esta fecha no está disponible. El vehículo ya está rentado.");
-            } else {
-                endDate.setInvalid(false);
+                if (invalid) {
+                    dateRangePicker.setInvalid(true);
+                    dateRangePicker.setErrorMessage("El rango contiene fechas ocupadas.");
+                } else {
+                    dateRangePicker.setInvalid(false);
+                }
             }
         });
 
@@ -604,11 +580,11 @@ public class RentalFormDialog extends Dialog {
             messageLayout.setPadding(false);
             messageLayout.setSpacing(false);
             messageLayout.getStyle()
-            .set("background", "#E3F2FD")  // Azul claro Material Design
-            .set("border-left", "4px solid #2196F3")  // Azul primario
-            .set("border-radius", "var(--lumo-border-radius-m)")
-            .set("padding", "0.75rem")
-            .set("margin-bottom", "1rem");
+                    .set("background", "#E3F2FD") // Azul claro Material Design
+                    .set("border-left", "4px solid #2196F3") // Azul primario
+                    .set("border-radius", "var(--lumo-border-radius-m)")
+                    .set("padding", "0.75rem")
+                    .set("margin-bottom", "1rem");
 
             // Encabezado con ícono animado
             HorizontalLayout header = new HorizontalLayout();
@@ -618,8 +594,8 @@ public class RentalFormDialog extends Dialog {
             Icon warningIcon = VaadinIcon.WARNING.create();
             warningIcon.setSize("20px");
             warningIcon.getStyle()
-            .set("color", "#1976D2")  // Azul oscuro
-            .set("animation", "pulse 2s ease-in-out infinite");
+                    .set("color", "#1976D2") // Azul oscuro
+                    .set("animation", "pulse 2s ease-in-out infinite");
 
             // Inyectar CSS para la animación
             warningIcon.getElement().executeJs(
@@ -633,9 +609,9 @@ public class RentalFormDialog extends Dialog {
                             vehicle.getLicensePlate(),
                             activeRentals.size()));
             headerText.getStyle()
-            .set("font-weight", "600")
-            .set("color", "#1565C0")  // Azul oscuro
-            .set("font-size", "0.9rem");
+                    .set("font-weight", "600")
+                    .set("color", "#1565C0") // Azul oscuro
+                    .set("font-size", "0.9rem");
 
             header.add(warningIcon, headerText);
             messageLayout.add(header);
@@ -657,7 +633,7 @@ public class RentalFormDialog extends Dialog {
 
             // Formatter para las fechas en español
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd MMM yyyy", new Locale("es", "SV"));
-            
+
             for (RentalDTO rental : activeRentals) {
                 // Chip para cada renta
                 HorizontalLayout chip = new HorizontalLayout();
@@ -724,13 +700,14 @@ public class RentalFormDialog extends Dialog {
     }
 
     private void calculatePrice() {
-        if (startDate.getValue() == null || endDate.getValue() == null) {
+        DateRange range = dateRangePicker.getValue();
+        if (range == null || range.getStartDate() == null || range.getEndDate() == null) {
             daysLabel.setText("Días: -");
             priceLabel.setText("Total estimado: -");
             return;
         }
 
-        long days = ChronoUnit.DAYS.between(startDate.getValue(), endDate.getValue());
+        long days = ChronoUnit.DAYS.between(range.getStartDate(), range.getEndDate());
 
         if (days <= 0) {
             daysLabel.setText("Días: -");
