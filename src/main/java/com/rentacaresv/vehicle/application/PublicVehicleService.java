@@ -11,11 +11,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
 
 /**
  * Servicio para la API pública de vehículos.
- * Solo expone vehículos no eliminados con información pública e información de disponibilidad.
+ * Solo expone vehículos publicados (publishedOnWeb = true) con información pública.
  */
 @Service
 @Transactional(readOnly = true)
@@ -27,29 +28,62 @@ public class PublicVehicleService {
     private final RentalRepository rentalRepository;
 
     /**
-     * Obtiene todos los vehículos activos (no eliminados) con su disponibilidad.
+     * Obtiene todos los vehículos publicados con su disponibilidad.
+     * Soporta filtro por rango de años y ordenamiento.
+     *
+     * @param yearFrom  Año mínimo (null = sin límite)
+     * @param yearTo    Año máximo (null = sin límite)
+     * @param sortBy    Campo de ordenamiento: price_asc, price_desc, year_desc, year_asc, brand_asc
      */
-    public List<PublicVehicleDTO> findAllVehicles() {
-        List<Vehicle> vehicles = vehicleRepository.findAllActive();
-        return vehicles.stream().map(this::toPublicDTO).toList();
+    public List<PublicVehicleDTO> findAllVehicles(Integer yearFrom, Integer yearTo, String sortBy) {
+        List<Vehicle> vehicles = vehicleRepository.findPublishedOnWeb();
+
+        // Filtro por rango de años
+        if (yearFrom != null) {
+            vehicles = vehicles.stream().filter(v -> v.getYear() >= yearFrom).toList();
+        }
+        if (yearTo != null) {
+            vehicles = vehicles.stream().filter(v -> v.getYear() <= yearTo).toList();
+        }
+
+        // Mapear a DTO
+        List<PublicVehicleDTO> dtos = vehicles.stream().map(this::toPublicDTO).toList();
+
+        // Ordenamiento
+        if (sortBy != null) {
+            Comparator<PublicVehicleDTO> comparator = switch (sortBy) {
+                case "price_asc" -> Comparator.comparing(PublicVehicleDTO::getPricePerDay);
+                case "price_desc" -> Comparator.comparing(PublicVehicleDTO::getPricePerDay).reversed();
+                case "year_asc" -> Comparator.comparing(PublicVehicleDTO::getYear);
+                case "year_desc" -> Comparator.comparing(PublicVehicleDTO::getYear).reversed();
+                case "brand_asc" -> Comparator.comparing(PublicVehicleDTO::getBrand);
+                default -> null;
+            };
+            if (comparator != null) {
+                dtos = dtos.stream().sorted(comparator).toList();
+            }
+        }
+
+        return dtos;
     }
 
     /**
-     * Obtiene un vehículo por ID (para la página de detalle).
+     * Obtiene un vehículo publicado por ID.
      */
     public PublicVehicleDTO findById(Long id) {
         Vehicle vehicle = vehicleRepository.findById(id)
-                .filter(v -> v.getDeletedAt() == null)
+                .filter(v -> v.getDeletedAt() == null && Boolean.TRUE.equals(v.getPublishedOnWeb()))
                 .orElseThrow(() -> new IllegalArgumentException("Vehículo no encontrado"));
         return toPublicDTO(vehicle);
     }
 
     /**
-     * Obtiene los primeros N vehículos disponibles (para el hero/landing).
+     * Obtiene los primeros N vehículos disponibles y publicados.
      */
     public List<PublicVehicleDTO> findFeaturedVehicles(int limit) {
-        List<Vehicle> vehicles = vehicleRepository.findAvailableVehicles();
+        List<Vehicle> vehicles = vehicleRepository.findPublishedOnWeb();
         return vehicles.stream()
+                .filter(Vehicle::isAvailable)
                 .limit(limit)
                 .map(this::toPublicDTO)
                 .toList();
@@ -75,29 +109,22 @@ public class PublicVehicleService {
                         .build())
                 .toList();
 
-        // Disponibilidad - rentas activas o pendientes
+        // Disponibilidad
         List<Rental> activeRentals = rentalRepository.findActiveRentalsByVehicleId(vehicle.getId());
         LocalDate today = LocalDate.now();
 
-        // Verificar si hay una renta que cubra hoy
         boolean availableNow = vehicle.isAvailable() && activeRentals.stream()
                 .noneMatch(r -> !r.getStartDate().isAfter(today) && !r.getEndDate().isBefore(today));
 
-        // Si no está disponible ahora, calcular cuándo estará
         LocalDate availableFrom = null;
         if (!availableNow && !activeRentals.isEmpty()) {
-            // Buscar la renta actual (que cubra hoy) y su fecha de fin
             availableFrom = activeRentals.stream()
                     .filter(r -> !r.getStartDate().isAfter(today) && !r.getEndDate().isBefore(today))
                     .map(r -> r.getEndDate().plusDays(1))
                     .findFirst()
                     .orElse(null);
-
-            // Si el vehículo está en mantenimiento o fuera de servicio sin renta activa hoy,
-            // no podemos saber cuándo estará disponible
         }
 
-        // Períodos reservados (solo rentas vigentes o futuras, excluir las ya pasadas)
         List<PublicVehicleDTO.ReservedPeriodDTO> reservedPeriods = activeRentals.stream()
                 .filter(r -> !r.getEndDate().isBefore(today))
                 .map(r -> PublicVehicleDTO.ReservedPeriodDTO.builder()

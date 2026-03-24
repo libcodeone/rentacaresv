@@ -20,17 +20,24 @@ public class PublicVehicleController {
     private final PublicVehicleService publicVehicleService;
 
     /**
-     * Lista todos los vehículos activos con su disponibilidad.
-     * GET /api/public/vehicles
+     * Lista todos los vehículos publicados con su disponibilidad.
+     * GET /api/public/vehicles?yearFrom=2020&yearTo=2025&sortBy=price_asc
+     *
+     * @param yearFrom Año mínimo (opcional)
+     * @param yearTo   Año máximo (opcional)
+     * @param sortBy   Ordenar por: price_asc, price_desc, year_desc, year_asc, brand_asc (opcional)
      */
     @GetMapping
-    public ResponseEntity<List<PublicVehicleDTO>> getAllVehicles() {
-        List<PublicVehicleDTO> vehicles = publicVehicleService.findAllVehicles();
+    public ResponseEntity<List<PublicVehicleDTO>> getAllVehicles(
+            @RequestParam(required = false) Integer yearFrom,
+            @RequestParam(required = false) Integer yearTo,
+            @RequestParam(required = false) String sortBy) {
+        List<PublicVehicleDTO> vehicles = publicVehicleService.findAllVehicles(yearFrom, yearTo, sortBy);
         return ResponseEntity.ok(vehicles);
     }
 
     /**
-     * Obtiene el detalle de un vehículo por ID (incluye períodos reservados).
+     * Obtiene el detalle de un vehículo publicado por ID.
      * GET /api/public/vehicles/{id}
      */
     @GetMapping("/{id}")
@@ -44,7 +51,7 @@ public class PublicVehicleController {
     }
 
     /**
-     * Obtiene vehículos destacados disponibles ahora (para el hero/landing page).
+     * Obtiene vehículos destacados disponibles (para landing page).
      * GET /api/public/vehicles/featured?limit=6
      */
     @GetMapping("/featured")
