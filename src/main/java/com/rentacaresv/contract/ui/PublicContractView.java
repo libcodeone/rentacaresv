@@ -338,6 +338,7 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         form.add(addressElSalvadorField, 2);
 
         addressForeignField = new TextField("Dirección en el Extranjero");
+        addressForeignField.setValue(customer.getAddressForeign() != null ? customer.getAddressForeign() : "");
         addressForeignField.setReadOnly(isReadOnly);
         form.add(addressForeignField, 2);
 
@@ -345,7 +346,7 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         phoneUsaField.setReadOnly(isReadOnly);
         form.add(phoneUsaField);
 
-        phoneFamilyField = new TextField("Tel. (Familiar)");
+        phoneFamilyField = new TextField("Teléfono");
         phoneFamilyField.setValue(customer.getPhone() != null ? customer.getPhone() : "");
         phoneFamilyField.setReadOnly(isReadOnly);
         form.add(phoneFamilyField);

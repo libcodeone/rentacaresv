@@ -30,6 +30,7 @@ public class CustomerMapper {
                 .email(customer.getEmail())
                 .phone(customer.getPhone())
                 .address(customer.getAddress())
+                .addressForeign(customer.getAddressForeign())
                 .birthDate(customer.getBirthDate())
                 .driverLicenseNumber(customer.getDriverLicenseNumber())
                 .driverLicenseCountry(customer.getDriverLicenseCountry())
