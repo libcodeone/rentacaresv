@@ -55,7 +55,8 @@ public class SecurityConfig {
                     "/offline.html",        // Página offline
                     "/api/google-calendar/callback", // OAuth2 callback de Google Calendar
                     "/forgot-password",    // Recuperación de contraseña
-                    "/reset-password"      // Restablecer contraseña
+                    "/reset-password",     // Restablecer contraseña
+                    "/api/public/**"       // API pública para la web
                 ).permitAll());
 
         // Configuración de Vaadin Security con login view
