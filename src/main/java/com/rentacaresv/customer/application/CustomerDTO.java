@@ -24,6 +24,7 @@ public class CustomerDTO {
     private String email;
     private String phone;
     private String address;
+    private String addressForeign;
     private LocalDate birthDate;
     
     // Licencia de conducir
