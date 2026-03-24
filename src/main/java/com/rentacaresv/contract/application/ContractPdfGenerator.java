@@ -196,9 +196,7 @@ public class ContractPdfGenerator {
         addCell(table, "Dir. El Salvador:", addressSV, 2);
         String phoneFamily = contract.getPhoneFamily() != null ? contract.getPhoneFamily() : 
                             (customer.getPhone() != null ? customer.getPhone() : "-");
-        addCell(table, "Teléfono:", phoneFamily, 1);
-        String phoneUSA = contract.getPhoneUsa() != null ? contract.getPhoneUsa() : "-";
-        addCell(table, "Tel. USA:", phoneUSA, 1);
+        addCell(table, "Teléfono:", phoneFamily, 2);
 
         // Fila 3: Dirección extranjero
         String addressForeign = contract.getAddressForeign() != null ? contract.getAddressForeign() : 
