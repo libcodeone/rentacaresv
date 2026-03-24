@@ -74,7 +74,6 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
     private TextField licenseField;
     private TextField addressElSalvadorField;
     private TextField addressForeignField;
-    private TextField phoneUsaField;
     private TextField phoneFamilyField;
 
     // Sección Vehículo
@@ -342,14 +341,10 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         addressForeignField.setReadOnly(isReadOnly);
         form.add(addressForeignField, 2);
 
-        phoneUsaField = new TextField("Tel. (USA)");
-        phoneUsaField.setReadOnly(isReadOnly);
-        form.add(phoneUsaField);
-
         phoneFamilyField = new TextField("Teléfono");
         phoneFamilyField.setValue(customer.getPhone() != null ? customer.getPhone() : "");
         phoneFamilyField.setReadOnly(isReadOnly);
-        form.add(phoneFamilyField);
+        form.add(phoneFamilyField, 2);
 
         section.add(form);
         return section;
@@ -1347,9 +1342,6 @@ private VerticalLayout createVideoUploadSection(String title, String videoType, 
         if (contract.getAddressForeign() != null) {
             addressForeignField.setValue(contract.getAddressForeign());
         }
-        if (contract.getPhoneUsa() != null) {
-            phoneUsaField.setValue(contract.getPhoneUsa());
-        }
         if (contract.getPhoneFamily() != null) {
             phoneFamilyField.setValue(contract.getPhoneFamily());
         }
@@ -1462,7 +1454,7 @@ private VerticalLayout createVideoUploadSection(String title, String videoType, 
                 deliveryLocationField.getValue(),
                 addressElSalvadorField.getValue(),
                 addressForeignField.getValue(),
-                phoneUsaField.getValue(),
+                null,
                 phoneFamilyField.getValue(),
                 paymentMethodCombo.getValue(),
                 parseDecimal(depositField.getValue()),
