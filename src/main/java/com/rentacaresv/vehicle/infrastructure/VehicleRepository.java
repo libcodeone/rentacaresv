@@ -73,4 +73,10 @@ public interface VehicleRepository extends JpaRepository<Vehicle, Long>, JpaSpec
      */
     @Query("SELECT COUNT(v) FROM Vehicle v WHERE v.status = 'AVAILABLE' AND v.deletedAt IS NULL")
     long countAvailableVehicles();
+
+    /**
+     * Encuentra vehículos publicados en la web (para la API pública)
+     */
+    @Query("SELECT v FROM Vehicle v WHERE v.publishedOnWeb = true AND v.deletedAt IS NULL ORDER BY v.year DESC, v.brand ASC")
+    List<Vehicle> findPublishedOnWeb();
 }
