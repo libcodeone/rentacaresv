@@ -45,6 +45,7 @@ public class CustomerFormDialog extends Dialog {
     private TextField email;
     private TextField phone;
     private TextArea address;
+    private TextArea addressForeign;
     private DatePicker birthDate;
     
     // Licencia de conducir
@@ -60,6 +61,7 @@ public class CustomerFormDialog extends Dialog {
     private Button cancelButton;
     
     private final boolean isEdit;
+    private Long customerId;
 
     public CustomerFormDialog(CustomerService customerService, CustomerDTO customerToEdit) {
         this.customerService = customerService;
@@ -146,10 +148,15 @@ public class CustomerFormDialog extends Dialog {
         phone.setMaxLength(20);
         phone.setClearButtonVisible(true);
         
-        address = new TextArea("Dirección");
-        address.setPlaceholder("Dirección completa del cliente...");
+        address = new TextArea("Dirección en El Salvador (Hospedaje)");
+        address.setPlaceholder("Dirección donde se hospedará en El Salvador...");
         address.setMaxLength(500);
         address.setHelperText("Máximo 500 caracteres");
+
+        addressForeign = new TextArea("Dirección en el Extranjero");
+        addressForeign.setPlaceholder("Dirección en su país de origen...");
+        addressForeign.setMaxLength(500);
+        addressForeign.setHelperText("Máximo 500 caracteres");
         
         // Categoría
         category = new ComboBox<>("Categoría");
@@ -182,6 +189,7 @@ public class CustomerFormDialog extends Dialog {
         
         formLayout.add(email, phone);
         formLayout.add(address, 2);
+        formLayout.add(addressForeign, 2);
         formLayout.add(notes, 2);
         
         // Binding
@@ -196,6 +204,7 @@ public class CustomerFormDialog extends Dialog {
         binder.forField(email).bind("email");
         binder.forField(phone).bind("phone");
         binder.forField(address).bind("address");
+        binder.forField(addressForeign).bind("addressForeign");
         binder.forField(birthDate).bind("birthDate");
         binder.forField(driverLicenseNumber).bind("driverLicenseNumber");
         binder.forField(driverLicenseCountry).bind("driverLicenseCountry");
@@ -235,6 +244,7 @@ public class CustomerFormDialog extends Dialog {
     }
 
     private void populateForm(CustomerDTO customer) {
+        this.customerId = customer.getId();
         fullName.setValue(customer.getFullName());
         
         documentType.setValue(DocumentType.valueOf(customer.getDocumentType()));
@@ -244,6 +254,7 @@ public class CustomerFormDialog extends Dialog {
         if (customer.getEmail() != null) email.setValue(customer.getEmail());
         if (customer.getPhone() != null) phone.setValue(customer.getPhone());
         if (customer.getAddress() != null) address.setValue(customer.getAddress());
+        if (customer.getAddressForeign() != null) addressForeign.setValue(customer.getAddressForeign());
         if (customer.getBirthDate() != null) birthDate.setValue(customer.getBirthDate());
         
         // Licencia de conducir
@@ -265,7 +276,11 @@ public class CustomerFormDialog extends Dialog {
     private void save() {
         try {
             binder.writeBean(command);
-            customerService.createCustomer(command);
+            if (isEdit) {
+                customerService.updateCustomer(customerId, command);
+            } else {
+                customerService.createCustomer(command);
+            }
             fireEvent(new SaveEvent(this));
             close();
         } catch (ValidationException e) {

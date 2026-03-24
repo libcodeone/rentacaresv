@@ -49,6 +49,7 @@ public class CustomerService {
                 .email(command.getEmail())
                 .phone(command.getPhone())
                 .address(command.getAddress())
+                .addressForeign(command.getAddressForeign())
                 .birthDate(command.getBirthDate())
                 .driverLicenseNumber(command.getDriverLicenseNumber())
                 .driverLicenseCountry(command.getDriverLicenseCountry())
@@ -63,6 +64,36 @@ public class CustomerService {
         
         log.info("Cliente creado exitosamente: {}", customer.getDisplayName());
         
+        return customerMapper.toDTO(customer);
+    }
+
+    /**
+     * Actualiza un cliente existente
+     */
+    public CustomerDTO updateCustomer(Long id, @Valid CreateCustomerCommand command) {
+        log.info("Actualizando cliente ID: {}", id);
+
+        Customer customer = customerRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Cliente no encontrado con ID: " + id));
+
+        // Actualizar campos (documento no se cambia en edición)
+        customer.setFullName(command.getFullName());
+        customer.setDocumentType(DocumentType.valueOf(command.getDocumentType().toUpperCase()));
+        customer.setEmail(command.getEmail());
+        customer.setPhone(command.getPhone());
+        customer.setAddress(command.getAddress());
+        customer.setAddressForeign(command.getAddressForeign());
+        customer.setBirthDate(command.getBirthDate());
+        customer.setDriverLicenseNumber(command.getDriverLicenseNumber());
+        customer.setDriverLicenseCountry(command.getDriverLicenseCountry());
+        customer.setDriverLicenseExpiry(command.getDriverLicenseExpiry());
+        customer.setCategory(CustomerCategory.valueOf(command.getCategory().toUpperCase()));
+        customer.setNotes(command.getNotes());
+
+        customer = customerRepository.save(customer);
+
+        log.info("Cliente actualizado exitosamente: {}", customer.getDisplayName());
+
         return customerMapper.toDTO(customer);
     }
 
