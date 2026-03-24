@@ -97,8 +97,9 @@ public class PublicVehicleService {
             // no podemos saber cuándo estará disponible
         }
 
-        // Períodos reservados (futuras rentas)
+        // Períodos reservados (solo rentas vigentes o futuras, excluir las ya pasadas)
         List<PublicVehicleDTO.ReservedPeriodDTO> reservedPeriods = activeRentals.stream()
+                .filter(r -> !r.getEndDate().isBefore(today))
                 .map(r -> PublicVehicleDTO.ReservedPeriodDTO.builder()
                         .startDate(r.getStartDate())
                         .endDate(r.getEndDate())
