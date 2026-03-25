@@ -89,6 +89,7 @@ public class VehicleService {
         }
 
         // Actualizar campos
+        vehicle.setLicensePlate(command.getLicensePlate());
         vehicle.setBrand(command.getBrand());
         vehicle.setModel(command.getModel());
         vehicle.setYear(command.getYear());
