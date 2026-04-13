@@ -93,6 +93,13 @@ public class Rental {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
+    /**
+     * Origen de la reserva: ADMIN (creada desde el panel) o WEB (reserva pública)
+     */
+    @Column(name = "source", nullable = false, length = 20)
+    @Builder.Default
+    private String source = "ADMIN";
+
     // ========================================
     // Información de viaje (opcional)
     // ========================================

@@ -28,8 +28,7 @@ import com.vaadin.flow.component.upload.Upload;
 import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
 import com.vaadin.flow.router.*;
 import com.vaadin.flow.server.VaadinRequest;
-import com.vaadin.flow.server.auth.AnonymousAllowed;
-
+import jakarta.annotation.security.PermitAll;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.InputStream;
@@ -39,29 +38,30 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Vista del contrato en formato similar al papel.
+ * Vista editable del contrato. Requiere autenticación.
+ * Accesible en /contract/:token — solo para usuarios del sistema.
  * Incluye:
- * - Datos del cliente
- * - Fotos de documentos (licencia frente/reverso, DUI/pasaporte frente/reverso)
+ * - Datos del cliente (editables)
+ * - Subida de fotos de documentos
  * - Datos del vehículo
- * - Revisión de accesorios con selección rápida
- * - Video del estado del vehículo
+ * - Revisión de accesorios
+ * - Subida de videos del vehículo
  * - Términos y condiciones
- * - Dos firmas (cliente y empleado) con validación de canvas
+ * - Firmas (cliente y empleado) con canvas
  */
-@Route("public/contract/:token")
+@Route("contract/:token")
 @PageTitle("Contrato de Alquiler")
-@AnonymousAllowed
+@PermitAll
 @CssImport("./css/public-contract.css")
 @Slf4j
-public class PublicContractView extends VerticalLayout implements BeforeEnterObserver {
+public class ContractEditView extends VerticalLayout implements BeforeEnterObserver {
 
     private final ContractService contractService;
     private final SettingsCache settingsCache;
 
     private Contract contract;
     private String token;
-    private boolean isReadOnly = true; // Vista pública: siempre solo lectura
+    private boolean isReadOnly = false;
 
     // Componentes del formulario
     private VerticalLayout mainContent;
@@ -119,7 +119,7 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
     // Observaciones
     private TextArea observationsField;
 
-    public PublicContractView(ContractService contractService, SettingsCache settingsCache) {
+    public ContractEditView(ContractService contractService, SettingsCache settingsCache) {
         this.contractService = contractService;
         this.settingsCache = settingsCache;
 
@@ -147,6 +147,13 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
 
         contract = contractOpt.get();
 
+        if (contract.getStatus() == ContractStatus.SIGNED) {
+            isReadOnly = true;
+            buildContractView();
+            showAlreadySignedBanner();
+            return;
+        }
+
         if (contract.getStatus() == ContractStatus.EXPIRED || contract.isExpired()) {
             showExpired();
             return;
@@ -158,10 +165,6 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         }
 
         buildContractView();
-
-        if (contract.getStatus() == ContractStatus.SIGNED) {
-            showAlreadySignedBanner();
-        }
     }
 
     private void buildContractView() {

@@ -17,7 +17,9 @@ import software.amazon.awssdk.services.s3.model.*;
 import java.io.InputStream;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -164,6 +166,54 @@ public class FileStorageService {
     }
 
     /**
+     * Mueve un archivo de una ruta a otra en Digital Ocean Spaces (esencial para sacar de temp)
+     */
+    public String moveFile(String sourceUrl, FolderType newFolderType, String newSubFolder) {
+        if (!initialized || sourceUrl == null || sourceUrl.isBlank()) {
+            return sourceUrl;
+        }
+
+        try {
+            String sourceKey = extractKeyFromUrl(sourceUrl);
+            String tenantId = settingsCache.getTenantId();
+            
+            // Extraer el nombre de archivo final de la ruta origen
+            String[] parts = sourceKey.split("/");
+            String fileName = parts[parts.length - 1];
+            
+            String destinationKey = buildKey(tenantId, newFolderType, newSubFolder, fileName);
+            
+            log.info("Moviendo archivo de {} a {}", sourceKey, destinationKey);
+
+            // 1. Copiar el objeto
+            CopyObjectRequest copyReq = CopyObjectRequest.builder()
+                    .sourceBucket(bucketName)
+                    .sourceKey(sourceKey)
+                    .destinationBucket(bucketName)
+                    .destinationKey(destinationKey)
+                    .acl(ObjectCannedACL.PUBLIC_READ) // Mantenerlo público
+                    .build();
+
+            s3Client.copyObject(copyReq);
+
+            // 2. Eliminar el objeto original
+            DeleteObjectRequest delReq = DeleteObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(sourceKey)
+                    .build();
+
+            s3Client.deleteObject(delReq);
+
+            return baseUrl + "/" + bucketName + "/" + destinationKey;
+
+        } catch (Exception e) {
+            log.error("Error moviendo archivo {}: {}", sourceUrl, e.getMessage());
+            // En caso de error, devolvemos la URL original para no romper el flujo
+            return sourceUrl; 
+        }
+    }
+
+    /**
      * Lista archivos en una carpeta
      */
     public List<String> listFiles(FolderType folderType, String subFolder) {
@@ -194,6 +244,38 @@ public class FileStorageService {
         }
 
         return fileUrls;
+    }
+
+    /**
+     * Lista archivos en una carpeta con su fecha de última modificación.
+     * Útil para identificar archivos huérfanos por antigüedad.
+     *
+     * @return Mapa de URL -> fecha de última modificación (Instant)
+     */
+    public Map<String, java.time.Instant> listFilesWithDates(FolderType folderType, String subFolder) {
+        Map<String, java.time.Instant> result = new HashMap<>();
+        if (!initialized) return result;
+
+        String tenantId = settingsCache.getTenantId();
+        String prefix = buildPrefix(tenantId, folderType, subFolder);
+
+        try {
+            ListObjectsV2Request request = ListObjectsV2Request.builder()
+                    .bucket(bucketName)
+                    .prefix(prefix)
+                    .build();
+
+            ListObjectsV2Response response = s3Client.listObjectsV2(request);
+
+            for (S3Object s3Object : response.contents()) {
+                String url = baseUrl + "/" + bucketName + "/" + s3Object.key();
+                result.put(url, s3Object.lastModified());
+            }
+        } catch (Exception e) {
+            log.error("Error listando archivos con fechas: {}", e.getMessage());
+        }
+
+        return result;
     }
 
     /**

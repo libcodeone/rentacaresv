@@ -28,7 +28,7 @@ public class WebConfig {
                 "http://localhost:5173"    // Vite dev
         ));
 
-        config.setAllowedMethods(List.of("GET", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(false);
         config.setMaxAge(3600L);

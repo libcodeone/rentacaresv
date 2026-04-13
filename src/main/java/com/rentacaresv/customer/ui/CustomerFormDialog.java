@@ -249,7 +249,6 @@ public class CustomerFormDialog extends Dialog {
         
         documentType.setValue(DocumentType.valueOf(customer.getDocumentType()));
         documentNumber.setValue(customer.getDocumentNumber());
-        documentNumber.setReadOnly(true); // No se puede cambiar en edición
         
         if (customer.getEmail() != null) email.setValue(customer.getEmail());
         if (customer.getPhone() != null) phone.setValue(customer.getPhone());
