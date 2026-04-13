@@ -57,10 +57,14 @@ public class SecurityConfig {
                     "/forgot-password",    // Recuperación de contraseña
                     "/reset-password",     // Restablecer contraseña
                     "/api/public/**"       // API pública para la web
-                ).permitAll());
+                ).permitAll())
+                .authorizeHttpRequests(authorize -> authorize
+                    .requestMatchers("/api/admin/**").hasRole("ADMIN"));
 
-        // Deshabilitar CSRF para endpoints públicos (evita el 302 Redirect en POST /api/public/**)
-        http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/**"));
+        // Deshabilitar CSRF para endpoints REST (evita 403 en llamadas externas)
+        http.csrf(csrf -> csrf
+                .ignoringRequestMatchers("/api/public/**")
+                .ignoringRequestMatchers("/api/admin/**"));
 
         // Configuración de Vaadin Security con login view
         http.with(VaadinSecurityConfigurer.vaadin(), configurer -> configurer
