@@ -1,17 +1,11 @@
 package com.rentacaresv.rental.ui;
 
 import com.rentacaresv.rental.application.RentalDTO;
-import com.rentacaresv.rental.application.RentalPhotoService;
 import com.rentacaresv.rental.application.RentalService;
-import com.rentacaresv.rental.domain.photo.RentalPhotoType;
-import com.rentacaresv.shared.storage.StorageInitializer;
-import com.rentacaresv.shared.ui.PhotoUploadPanel;
-import com.rentacaresv.shared.ui.RentalPhotoUploadPanel;
 import com.vaadin.flow.component.ComponentEvent;
 import com.vaadin.flow.component.ComponentEventListener;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
-import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H3;
@@ -28,37 +22,23 @@ import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.shared.Registration;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.List;
-import java.util.Map;
-
 /**
- * Diálogo para recibir devolución de vehículo
+ * Diálogo para recibir devolución de vehículo.
  * - Cambia estado: ACTIVE → COMPLETED
- * - Sube fotos de devolución
- * - Guarda notas
- * - Opción de marcar vehículo para mantenimiento
+ * - Guarda notas de devolución
  */
 @Slf4j
 public class ReturnDialog extends Dialog {
 
     private final RentalService rentalService;
-    private final RentalPhotoService rentalPhotoService;
-    private final StorageInitializer storageInitializer;
     private final RentalDTO rental;
 
-    private RentalPhotoUploadPanel photoPanel;
     private TextArea notesField;
-    private Checkbox maintenanceCheckbox;
     private Button confirmButton;
     private Button cancelButton;
 
-    public ReturnDialog(RentalService rentalService,
-                        RentalPhotoService rentalPhotoService,
-                        StorageInitializer storageInitializer,
-                        RentalDTO rental) {
+    public ReturnDialog(RentalService rentalService, RentalDTO rental) {
         this.rentalService = rentalService;
-        this.rentalPhotoService = rentalPhotoService;
-        this.storageInitializer = storageInitializer;
         this.rental = rental;
 
         configureDialog();
@@ -70,38 +50,31 @@ public class ReturnDialog extends Dialog {
         setModal(true);
         setDraggable(false);
         setResizable(false);
-        setWidth("900px");
-        setMaxHeight("90vh");
+        setWidth("550px");
     }
 
     private void createContent() {
-        // Header con icono
+        // Header
         HorizontalLayout titleLayout = new HorizontalLayout();
         titleLayout.setAlignItems(FlexComponent.Alignment.CENTER);
         titleLayout.setSpacing(true);
-        
+
         Icon returnIcon = VaadinIcon.SIGN_IN.create();
         returnIcon.setSize("24px");
         returnIcon.getStyle().set("color", "var(--lumo-primary-color)");
-        
+
         H3 title = new H3("Recibir Devolución");
         title.getStyle().set("margin", "0");
-        
+
         titleLayout.add(returnIcon, title);
 
         // Info de la renta
         VerticalLayout infoLayout = createInfoSection();
 
         // Separador
-        Div separator1 = createSeparator();
+        Div separator = createSeparator();
 
-        // Panel de fotos
-        photoPanel = new RentalPhotoUploadPanel("Fotos de Devolución", false);
-
-        // Separador
-        Div separator2 = createSeparator();
-
-        // Notas con icono
+        // Notas
         HorizontalLayout notesTitleLayout = new HorizontalLayout();
         notesTitleLayout.setAlignItems(FlexComponent.Alignment.CENTER);
         Icon notesIcon = VaadinIcon.CLIPBOARD_TEXT.create();
@@ -109,7 +82,7 @@ public class ReturnDialog extends Dialog {
         H4 notesTitle = new H4("Notas de Devolución");
         notesTitle.getStyle().set("margin", "0");
         notesTitleLayout.add(notesIcon, notesTitle);
-        notesTitleLayout.getStyle().set("margin", "1rem 0 0.5rem 0");
+        notesTitleLayout.getStyle().set("margin", "0 0 0.5rem 0");
 
         notesField = new TextArea();
         notesField.setPlaceholder("Ej: Vehículo devuelto en buen estado, rayón menor en puerta trasera, kilometraje: 15,250...");
@@ -118,32 +91,12 @@ public class ReturnDialog extends Dialog {
         notesField.setMaxLength(1000);
         notesField.setHelperText("Opcional - Máximo 1000 caracteres");
 
-        // Checkbox de mantenimiento con icono
-        HorizontalLayout maintenanceLayout = new HorizontalLayout();
-        maintenanceLayout.setAlignItems(FlexComponent.Alignment.CENTER);
-        maintenanceLayout.setSpacing(true);
-        
-        Icon warningIcon = VaadinIcon.WARNING.create();
-        warningIcon.setSize("16px");
-        warningIcon.getStyle().set("color", "var(--lumo-error-color)");
-        
-        maintenanceCheckbox = new Checkbox("Requiere mantenimiento o reparación");
-        maintenanceCheckbox.getStyle().set("color", "var(--lumo-error-text-color)");
-        
-        maintenanceLayout.add(warningIcon, maintenanceCheckbox);
-        maintenanceLayout.getStyle().set("margin-top", "0.5rem");
-
-        // Layout principal
         VerticalLayout content = new VerticalLayout(
-            titleLayout,
-            infoLayout,
-            separator1,
-            photoPanel,
-            separator2,
-            notesTitleLayout,
-            notesField,
-            maintenanceLayout
-        );
+                titleLayout,
+                infoLayout,
+                separator,
+                notesTitleLayout,
+                notesField);
         content.setPadding(true);
         content.setSpacing(true);
 
@@ -155,33 +108,27 @@ public class ReturnDialog extends Dialog {
         layout.setPadding(false);
         layout.setSpacing(false);
         layout.getStyle()
-            .set("background", "var(--lumo-contrast-5pct)")
-            .set("border-radius", "var(--lumo-border-radius-m)")
-            .set("padding", "1rem");
+                .set("background", "var(--lumo-contrast-5pct)")
+                .set("border-radius", "var(--lumo-border-radius-m)")
+                .set("padding", "1rem");
 
-        // Vehículo
         HorizontalLayout vehicleRow = new HorizontalLayout();
         vehicleRow.setAlignItems(FlexComponent.Alignment.CENTER);
         Span vehicleLabel = new Span("Vehículo:");
-        vehicleLabel.getStyle().set("font-weight", "bold").set("width", "120px");
-        Span vehicleValue = new Span(rental.getVehicleDescription());
-        vehicleRow.add(vehicleLabel, vehicleValue);
+        vehicleLabel.getStyle().set("font-weight", "bold").set("width", "130px");
+        vehicleRow.add(vehicleLabel, new Span(rental.getVehicleDescription()));
 
-        // Cliente
         HorizontalLayout customerRow = new HorizontalLayout();
         customerRow.setAlignItems(FlexComponent.Alignment.CENTER);
         Span customerLabel = new Span("Cliente:");
-        customerLabel.getStyle().set("font-weight", "bold").set("width", "120px");
-        Span customerValue = new Span(rental.getCustomerName());
-        customerRow.add(customerLabel, customerValue);
+        customerLabel.getStyle().set("font-weight", "bold").set("width", "130px");
+        customerRow.add(customerLabel, new Span(rental.getCustomerName()));
 
-        // Fecha devolución
         HorizontalLayout dateRow = new HorizontalLayout();
         dateRow.setAlignItems(FlexComponent.Alignment.CENTER);
         Span dateLabel = new Span("Fecha devolución:");
-        dateLabel.getStyle().set("font-weight", "bold").set("width", "120px");
-        Span dateValue = new Span(rental.getEndDate().toString());
-        dateRow.add(dateLabel, dateValue);
+        dateLabel.getStyle().set("font-weight", "bold").set("width", "130px");
+        dateRow.add(dateLabel, new Span(rental.getEndDate().toString()));
 
         layout.add(vehicleRow, customerRow, dateRow);
         return layout;
@@ -190,9 +137,9 @@ public class ReturnDialog extends Dialog {
     private Div createSeparator() {
         Div separator = new Div();
         separator.getStyle()
-            .set("height", "1px")
-            .set("background", "var(--lumo-contrast-10pct)")
-            .set("margin", "1rem 0");
+                .set("height", "1px")
+                .set("background", "var(--lumo-contrast-10pct)")
+                .set("margin", "0.5rem 0");
         return separator;
     }
 
@@ -214,50 +161,13 @@ public class ReturnDialog extends Dialog {
 
     private void confirmReturn() {
         try {
-            // Inicializar storage si es necesario
-            storageInitializer.initializeIfNeeded();
-
-            // 1. Cambiar estado de renta a COMPLETED
-            boolean needsMaintenance = maintenanceCheckbox.getValue();
-            rentalService.returnRental(rental.getId(), notesField.getValue(), needsMaintenance);
-
-            // 2. Subir fotos pendientes
-            uploadPendingPhotos();
-
-            // 3. Mostrar éxito y cerrar
+            rentalService.returnRental(rental.getId(), notesField.getValue(), false);
             fireEvent(new ReturnConfirmedEvent(this));
             showSuccessNotification("Devolución registrada exitosamente");
             close();
-
         } catch (Exception e) {
             log.error("Error al registrar devolución: {}", e.getMessage(), e);
             showErrorNotification("Error al registrar devolución: " + e.getMessage());
-        }
-    }
-
-    private void uploadPendingPhotos() {
-        Map<RentalPhotoType, List<PhotoUploadPanel.PendingUpload>> allUploads =
-            photoPanel.getAllPendingUploads();
-
-        for (Map.Entry<RentalPhotoType, List<PhotoUploadPanel.PendingUpload>> entry : allUploads.entrySet()) {
-            RentalPhotoType photoType = entry.getKey();
-            List<PhotoUploadPanel.PendingUpload> uploads = entry.getValue();
-
-            for (PhotoUploadPanel.PendingUpload upload : uploads) {
-                try {
-                    rentalPhotoService.uploadPhoto(
-                        rental.getId(),
-                        upload.getInputStream(),
-                        upload.getFileName(),
-                        upload.getMimeType(),
-                        photoType,
-                        null
-                    );
-                    log.info("Foto de devolución subida: {} - {}", photoType, upload.getFileName());
-                } catch (Exception e) {
-                    log.error("Error subiendo foto de devolución: {}", e.getMessage(), e);
-                }
-            }
         }
     }
 

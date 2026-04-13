@@ -9,7 +9,11 @@ public enum RentalPhotoType {
     DELIVERY_ACCESSORIES("Entrega - Accesorios"),
     RETURN_EXTERIOR("Devolución - Exterior"),
     RETURN_INTERIOR("Devolución - Interior"),
-    RETURN_ACCESSORIES("Devolución - Accesorios");
+    RETURN_ACCESSORIES("Devolución - Accesorios"),
+    DOCUMENT_ID_FRONT("Documento de Identidad - Frente"),
+    DOCUMENT_ID_BACK("Documento de Identidad - Reverso"),
+    DOCUMENT_LICENSE_FRONT("Licencia de Conducir - Frente"),
+    DOCUMENT_LICENSE_BACK("Licencia de Conducir - Reverso");
 
     private final String label;
 

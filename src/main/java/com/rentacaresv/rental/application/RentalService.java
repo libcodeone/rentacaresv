@@ -393,7 +393,7 @@ public class RentalService {
      */
     private String generateContractNumber() {
         String date = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String prefix = "RENT-" + date + "-";
+        String prefix = "ADM-" + date + "-";
 
         // Buscar el último número del día
         int sequence = 1;
