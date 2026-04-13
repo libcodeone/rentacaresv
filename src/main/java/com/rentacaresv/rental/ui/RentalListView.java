@@ -418,8 +418,7 @@ public class RentalListView extends VerticalLayout {
     }
 
     private void openDeliveryDialog(RentalDTO rental) {
-        DeliveryDialog dialog = new DeliveryDialog(
-                rentalService, rentalPhotoService, storageInitializer, rental);
+        DeliveryDialog dialog = new DeliveryDialog(rentalService, rental);
         dialog.addDeliveryConfirmedListener(e -> {
             refreshData();
             showSuccessNotification("Vehículo entregado exitosamente");
@@ -428,8 +427,7 @@ public class RentalListView extends VerticalLayout {
     }
 
     private void openReturnDialog(RentalDTO rental) {
-        ReturnDialog dialog = new ReturnDialog(
-                rentalService, rentalPhotoService, storageInitializer, rental);
+        ReturnDialog dialog = new ReturnDialog(rentalService, rental);
         dialog.addReturnConfirmedListener(e -> {
             refreshData();
             showSuccessNotification("Devolución registrada exitosamente");

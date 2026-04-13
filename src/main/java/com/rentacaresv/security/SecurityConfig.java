@@ -59,6 +59,9 @@ public class SecurityConfig {
                     "/api/public/**"       // API pública para la web
                 ).permitAll());
 
+        // Deshabilitar CSRF para endpoints públicos (evita el 302 Redirect en POST /api/public/**)
+        http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/public/**"));
+
         // Configuración de Vaadin Security con login view
         http.with(VaadinSecurityConfigurer.vaadin(), configurer -> configurer
                 .loginView(LoginView.class));
