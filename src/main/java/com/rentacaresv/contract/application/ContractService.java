@@ -3,6 +3,8 @@ package com.rentacaresv.contract.application;
 import com.rentacaresv.contract.domain.*;
 import com.rentacaresv.contract.infrastructure.*;
 import com.rentacaresv.rental.domain.Rental;
+import com.rentacaresv.rental.domain.photo.RentalPhotoType;
+import com.rentacaresv.rental.infrastructure.RentalPhotoRepository;
 import com.rentacaresv.rental.infrastructure.RentalRepository;
 import com.rentacaresv.shared.storage.FileStorageService;
 import com.rentacaresv.shared.storage.FolderType;
@@ -35,6 +37,7 @@ public class ContractService {
     private final ContractAccessoryRepository contractAccessoryRepository;
     private final AccessoryCatalogRepository accessoryCatalogRepository;
     private final RentalRepository rentalRepository;
+    private final RentalPhotoRepository rentalPhotoRepository;
     private final FileStorageService fileStorageService;
     private final ContractPdfGenerator pdfGenerator;
     private final ContractEmailService emailService;
@@ -150,11 +153,30 @@ public class ContractService {
                 .expiresAt(LocalDateTime.now().plusDays(7))
                 .build();
 
-        contract = contractRepository.save(contract);
-
         // Los accesorios se agregarán desde la vista pública la primera vez que se
         // llame a updateAccessories()
         // El contrato inicia SIN accesorios
+
+        // Si la renta viene de la web, copiar las fotos de documentos al contrato
+        if ("WEB".equals(rental.getSource())) {
+            var photos = rentalPhotoRepository.findByRentalId(rentalId);
+            for (var photo : photos) {
+                switch (photo.getPhotoType()) {
+                    case DOCUMENT_ID_FRONT -> contract.setDocumentFrontUrl(photo.getPhotoUrl());
+                    case DOCUMENT_ID_BACK -> contract.setDocumentBackUrl(photo.getPhotoUrl());
+                    case DOCUMENT_LICENSE_FRONT -> contract.setLicenseFrontUrl(photo.getPhotoUrl());
+                    case DOCUMENT_LICENSE_BACK -> contract.setLicenseBackUrl(photo.getPhotoUrl());
+                    default -> { }
+                }
+            }
+            contract.setDocumentNumber(rental.getCustomer().getDocumentNumber());
+
+            Contract savedContract = contractRepository.save(contract);
+            log.info("Fotos de reserva web copiadas al contrato {}", savedContract.getToken());
+            return savedContract;
+        }
+
+        contract = contractRepository.save(contract);
 
         log.info("✅ Contrato creado con token: {} (sin accesorios)", contract.getToken());
         return contract;
@@ -187,17 +209,18 @@ public class ContractService {
 
         String frontUrl = null;
         String backUrl = null;
+        String contractNumber = contract.getRental().getContractNumber();
 
         // Subir foto frontal
         if (frontPhotoBase64 != null && !frontPhotoBase64.isEmpty()) {
             frontUrl = uploadBase64Image(frontPhotoBase64, "doc_front_" + contract.getId(),
-                    FolderType.CONTRACT_DOCUMENTS);
+                    FolderType.CONTRACT_DOCUMENTS, contractNumber);
         }
 
         // Subir foto trasera (opcional)
         if (backPhotoBase64 != null && !backPhotoBase64.isEmpty()) {
             backUrl = uploadBase64Image(backPhotoBase64, "doc_back_" + contract.getId(),
-                    FolderType.CONTRACT_DOCUMENTS);
+                    FolderType.CONTRACT_DOCUMENTS, contractNumber);
         }
 
         contract.updateDocumentInfo(documentType, documentNumber, frontUrl, backUrl);
@@ -349,7 +372,7 @@ public class ContractService {
 
         // Subir firma
         String signatureUrl = uploadBase64Image(signatureBase64, "signature_" + contract.getId(),
-                FolderType.CONTRACT_SIGNATURES);
+                FolderType.CONTRACT_SIGNATURES, contract.getRental().getContractNumber());
 
         // Firmar
         contract.sign(signatureUrl, ipAddress, userAgent);
@@ -397,14 +420,14 @@ public class ContractService {
             byte[] pdfBytes = pdfGenerator.generatePdf(fullContract);
 
             // Subir a Digital Ocean Spaces
-            String fileName = "contrato_" + fullContract.getRental().getContractNumber() + "_" + fullContract.getId()
-                    + ".pdf";
+            String contractSubFolder = fullContract.getRental().getContractNumber();
+            String fileName = "contrato_" + contractSubFolder + "_" + fullContract.getId() + ".pdf";
             String pdfUrl = fileStorageService.uploadFile(
                     new ByteArrayInputStream(pdfBytes),
                     fileName,
                     "application/pdf",
                     FolderType.CONTRACT_DOCUMENTS,
-                    null);
+                    contractSubFolder);
 
             // Actualizar contrato con URL del PDF
             fullContract.setPdfUrl(pdfUrl);
@@ -474,7 +497,7 @@ public class ContractService {
     /**
      * Sube una imagen en Base64 a Digital Ocean Spaces
      */
-    private String uploadBase64Image(String base64Data, String fileName, FolderType folderType) {
+    private String uploadBase64Image(String base64Data, String fileName, FolderType folderType, String subFolder) {
         try {
             // Remover prefijo data:image/xxx;base64, si existe
             String base64Clean = base64Data;
@@ -500,7 +523,7 @@ public class ContractService {
                     fileName + extension,
                     mimeType,
                     folderType,
-                    null);
+                    subFolder);
         } catch (Exception e) {
             log.error("Error subiendo imagen base64: {}", e.getMessage(), e);
             throw new RuntimeException("Error al subir imagen: " + e.getMessage(), e);
@@ -530,14 +553,16 @@ public class ContractService {
             throw new IllegalStateException("El contrato no puede ser firmado. Estado: " + contract.getStatus());
         }
 
+        String contractNumber = contract.getRental().getContractNumber();
+
         // Subir firma del cliente
         String clientSignatureUrl = uploadBase64Image(clientSignatureBase64, "signature_client_" + contract.getId(),
-                FolderType.CONTRACT_SIGNATURES);
+                FolderType.CONTRACT_SIGNATURES, contractNumber);
 
         // Subir firma del empleado
         String employeeSignatureUrl = uploadBase64Image(employeeSignatureBase64,
                 "signature_employee_" + contract.getId(),
-                FolderType.CONTRACT_SIGNATURES);
+                FolderType.CONTRACT_SIGNATURES, contractNumber);
 
         // Firmar contrato (cliente)
         contract.sign(clientSignatureUrl, ipAddress, userAgent);
@@ -584,33 +609,39 @@ public class ContractService {
             throw new IllegalStateException("El contrato no puede ser modificado");
         }
 
+        String contractNumber = contract.getRental().getContractNumber();
+
         // Subir foto documento frente
-        String docFrontUrl = null;
-        if (documentFrontBase64 != null && !documentFrontBase64.isEmpty()) {
-            docFrontUrl = uploadBase64Image(documentFrontBase64, "doc_front_" + contract.getId(),
-                    FolderType.CONTRACT_DOCUMENTS);
-        }
+        String docFrontUrl = replaceDocumentImage(
+                contract.getDocumentFrontUrl(),
+                documentFrontBase64,
+                "doc_front_" + contract.getId(),
+                contractNumber
+        );
 
         // Subir foto documento reverso
-        String docBackUrl = null;
-        if (documentBackBase64 != null && !documentBackBase64.isEmpty()) {
-            docBackUrl = uploadBase64Image(documentBackBase64, "doc_back_" + contract.getId(),
-                    FolderType.CONTRACT_DOCUMENTS);
-        }
+        String docBackUrl = replaceDocumentImage(
+                contract.getDocumentBackUrl(),
+                documentBackBase64,
+                "doc_back_" + contract.getId(),
+                contractNumber
+        );
 
         // Subir foto licencia frente
-        String licenseFrontUrl = null;
-        if (licenseFrontBase64 != null && !licenseFrontBase64.isEmpty()) {
-            licenseFrontUrl = uploadBase64Image(licenseFrontBase64, "license_front_" + contract.getId(),
-                    FolderType.CONTRACT_DOCUMENTS);
-        }
+        String licenseFrontUrl = replaceDocumentImage(
+                contract.getLicenseFrontUrl(),
+                licenseFrontBase64,
+                "license_front_" + contract.getId(),
+                contractNumber
+        );
 
         // Subir foto licencia reverso
-        String licenseBackUrl = null;
-        if (licenseBackBase64 != null && !licenseBackBase64.isEmpty()) {
-            licenseBackUrl = uploadBase64Image(licenseBackBase64, "license_back_" + contract.getId(),
-                    FolderType.CONTRACT_DOCUMENTS);
-        }
+        String licenseBackUrl = replaceDocumentImage(
+                contract.getLicenseBackUrl(),
+                licenseBackBase64,
+                "license_back_" + contract.getId(),
+                contractNumber
+        );
 
         // Actualizar contrato
         contract.setDocumentType(documentType);
@@ -621,6 +652,24 @@ public class ContractService {
         contract.setLicenseBackUrl(licenseBackUrl);
 
         return contractRepository.save(contract);
+    }
+
+    private String replaceDocumentImage(String currentUrl, String base64Data, String fileName, String subFolder) {
+        if (base64Data == null || base64Data.isEmpty()) {
+            return currentUrl;
+        }
+
+        String newUrl = uploadBase64Image(base64Data, fileName, FolderType.CONTRACT_DOCUMENTS, subFolder);
+
+        if (currentUrl != null && !currentUrl.isBlank() && !currentUrl.equals(newUrl)) {
+            try {
+                fileStorageService.deleteFile(currentUrl);
+            } catch (Exception e) {
+                log.warn("No se pudo eliminar archivo previo {}: {}", currentUrl, e.getMessage());
+            }
+        }
+
+        return newUrl;
     }
 
     // ========================================
@@ -662,7 +711,7 @@ public class ContractService {
                     filePrefix + contract.getId() + "_" + fileName,
                     contentType,
                     FolderType.CONTRACT_VIDEOS,
-                    null);
+                    contract.getRental().getContractNumber());
 
             // Actualizar el campo correspondiente según el tipo
             switch (videoType) {
@@ -699,7 +748,7 @@ public class ContractService {
                     "video_devolucion_" + contract.getId() + "_" + fileName,
                     contentType,
                     FolderType.CONTRACT_VIDEOS,
-                    null);
+                    contract.getRental().getContractNumber());
 
             contract.setVehicleReturnVideoUrl(videoUrl);
             contract = contractRepository.save(contract);
