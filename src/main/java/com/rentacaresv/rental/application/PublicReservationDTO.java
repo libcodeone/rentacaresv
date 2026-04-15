@@ -100,6 +100,20 @@ public class PublicReservationDTO {
     private String additionalDriverDui;
 
     // ========================================
+    // Salida del país (opcional)
+    // ========================================
+
+    /** El cliente planea sacar el vehículo fuera del país */
+    private boolean sacarPais = false;
+
+    /** Países destino separados por coma (ej: "Guatemala,Honduras") */
+    @Size(max = 300)
+    private String destinosFueraPais;
+
+    /** Cantidad de días que el vehículo estará fuera del país */
+    private int diasFueraPais = 0;
+
+    // ========================================
     // Honeypot (anti-bot)
     // ========================================
 
