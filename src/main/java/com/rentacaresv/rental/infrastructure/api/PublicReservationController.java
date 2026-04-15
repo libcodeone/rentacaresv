@@ -2,6 +2,7 @@ package com.rentacaresv.rental.infrastructure.api;
 
 import com.rentacaresv.rental.application.PublicReservationDTO;
 import com.rentacaresv.rental.application.PublicReservationService;
+import com.rentacaresv.settings.application.SettingsCache;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
 import java.util.Map;
 
 /**
@@ -23,6 +25,7 @@ import java.util.Map;
 public class PublicReservationController {
 
     private final PublicReservationService reservationService;
+    private final SettingsCache settingsCache;
 
     /**
      * Crea una nueva reserva desde la web.
@@ -70,6 +73,18 @@ public class PublicReservationController {
                     "message", "Error al procesar la reserva. Intente de nuevo."
             ));
         }
+    }
+
+    /**
+     * Configuración pública para el formulario de reserva web.
+     * GET /api/public/reservations/config
+     */
+    @GetMapping("/config")
+    public ResponseEntity<Map<String, Object>> getPublicConfig() {
+        BigDecimal tarifa = settingsCache.getSettings().getTarifaSacarPais();
+        return ResponseEntity.ok(Map.of(
+                "tarifaSacarPais", tarifa != null ? tarifa : BigDecimal.ZERO
+        ));
     }
 
     private String getClientIp(HttpServletRequest request) {

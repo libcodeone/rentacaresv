@@ -58,7 +58,9 @@ public class RentalPriceCalculator {
      * Calcula los días de renta
      */
     public int calculateDays(LocalDate startDate, LocalDate endDate) {
-        long days = ChronoUnit.DAYS.between(startDate, endDate);
-        return (int) days; // No incluye el día de entrega, solo días completos
+        // +1: se cuenta el día de entrega y el día de devolución (ambos inclusivos)
+        // Ej: 1 mayo → 21 mayo = 21 días
+        long days = ChronoUnit.DAYS.between(startDate, endDate) + 1;
+        return (int) days;
     }
 }
