@@ -158,6 +158,17 @@ public class Settings implements Serializable {
     private Long companyCalendarUserId;
 
     // ========================================
+    // Tarifas especiales de renta
+    // ========================================
+
+    /**
+     * Tarifa diaria adicional cuando el cliente saca el vehículo fuera del país.
+     * Se suma al precio base por cada día fuera del país declarado.
+     */
+    @Column(name = "tarifa_sacar_pais", precision = 10, scale = 2)
+    private java.math.BigDecimal tarifaSacarPais;
+
+    // ========================================
     // Auditoría
     // ========================================
 
@@ -185,6 +196,14 @@ public class Settings implements Serializable {
      */
     public void setTenantId(String tenantId) {
         this.tenantId = tenantId;
+    }
+
+    public java.math.BigDecimal getTarifaSacarPais() {
+        return this.tarifaSacarPais;
+    }
+
+    public void setTarifaSacarPais(java.math.BigDecimal tarifaSacarPais) {
+        this.tarifaSacarPais = tarifaSacarPais;
     }
 
     // ========================================
