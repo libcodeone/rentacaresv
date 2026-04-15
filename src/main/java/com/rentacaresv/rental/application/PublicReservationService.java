@@ -104,7 +104,8 @@ public class PublicReservationService {
         // 5. Validar que no haya conflictos de fechas
         if (rentalRepository.hasConflictingRentals(dto.getVehicleId(), dto.getStartDate(), dto.getEndDate())) {
             throw new IllegalStateException(
-                    "El vehículo no está disponible en las fechas seleccionadas. Por favor elija otras fechas.");
+                    "El vehículo ya tiene una reserva que se cruza con las fechas seleccionadas. " +
+                    "Si necesitas fechas no continuas, realiza dos reservas separadas.");
         }
 
         // 6. Validar licencia no vencida
@@ -118,10 +119,20 @@ public class PublicReservationService {
         // 8. Crear o reutilizar cliente
         Customer customer = findOrCreateCustomer(dto);
 
-        // 9. Calcular precio
+        // 9. Calcular precio base
         int days = priceCalculator.calculateDays(dto.getStartDate(), dto.getEndDate());
         BigDecimal dailyRate = priceCalculator.selectDailyRate(vehicle, customer, days);
         BigDecimal totalAmount = priceCalculator.calculateTotalPrice(vehicle, customer, dto.getStartDate(), dto.getEndDate());
+
+        // Cargo adicional por salida del país
+        BigDecimal cargoSacarPais = BigDecimal.ZERO;
+        if (dto.isSacarPais() && dto.getDiasFueraPais() > 0) {
+            BigDecimal tarifaSacarPais = settingsCache.getSettings().getTarifaSacarPais();
+            if (tarifaSacarPais != null && tarifaSacarPais.compareTo(BigDecimal.ZERO) > 0) {
+                cargoSacarPais = tarifaSacarPais.multiply(BigDecimal.valueOf(dto.getDiasFueraPais()));
+                totalAmount = totalAmount.add(cargoSacarPais);
+            }
+        }
 
         // 10. Generar número de contrato
         String contractNumber = generateContractNumber();
@@ -142,6 +153,10 @@ public class PublicReservationService {
                 .flightNumber(dto.getFlightNumber())
                 .accommodation(dto.getAccommodation())
                 .contactPhone(dto.getContactPhone())
+                .sacarPais(dto.isSacarPais())
+                .destinosFueraPais(dto.getDestinosFueraPais())
+                .diasFueraPais(dto.getDiasFueraPais() > 0 ? dto.getDiasFueraPais() : null)
+                .cargoSacarPais(cargoSacarPais.compareTo(BigDecimal.ZERO) > 0 ? cargoSacarPais : null)
                 .notes(buildNotesFromReservation(dto))
                 .build();
 

@@ -22,6 +22,7 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.EmailField;
 import com.vaadin.flow.component.textfield.IntegerField;
+import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.upload.Upload;
@@ -69,6 +70,9 @@ public class SettingsView extends VerticalLayout {
     private TextField googleClientIdField;
     private PasswordField googleClientSecretField;
 
+    // Campos de tarifas especiales
+    private NumberField tarifaSacarPaisField;
+
     public SettingsView(SettingsService settingsService, DynamicMailService mailService) {
         this.settingsService = settingsService;
         this.mailService = mailService;
@@ -80,7 +84,7 @@ public class SettingsView extends VerticalLayout {
         H2 title = new H2("Configuración del Sistema");
         title.getStyle().set("margin-top", "0");
 
-        add(title, createLogoSection(), createCompanySection(), createEmailSection(), createGoogleCalendarSection());
+        add(title, createLogoSection(), createCompanySection(), createEmailSection(), createGoogleCalendarSection(), createTarifasSection());
     }
 
     private VerticalLayout createLogoSection() {
@@ -676,6 +680,61 @@ public class SettingsView extends VerticalLayout {
     private String getRedirectUri() {
         // Construir la URI de redirección para mostrar al usuario
         return "http://localhost:8091/api/google-calendar/callback";
+    }
+
+    // ========================================
+    // SECCIÓN TARIFAS ESPECIALES
+    // ========================================
+
+    private VerticalLayout createTarifasSection() {
+        VerticalLayout section = new VerticalLayout();
+        section.setPadding(true);
+        section.setSpacing(true);
+        section.getStyle()
+                .set("background", "var(--lumo-base-color)")
+                .set("border-radius", "var(--lumo-border-radius-l)")
+                .set("box-shadow", "var(--lumo-box-shadow-s)");
+
+        H3 sectionTitle = new H3("Tarifas Especiales de Renta");
+        sectionTitle.getStyle().set("margin-top", "0");
+
+        Paragraph description = new Paragraph(
+                "Cargos adicionales que se suman automáticamente al precio de la reserva web según las opciones que el cliente seleccione.");
+        description.getStyle()
+                .set("color", "var(--lumo-secondary-text-color)")
+                .set("font-size", "var(--lumo-font-size-s)");
+
+        Settings settings = settingsService.getSettings();
+
+        tarifaSacarPaisField = new NumberField("Tarifa por sacar el vehículo del país ($/día)");
+        tarifaSacarPaisField.setMin(0);
+        tarifaSacarPaisField.setStep(0.01);
+        tarifaSacarPaisField.setValue(settings.getTarifaSacarPais() != null
+                ? settings.getTarifaSacarPais().doubleValue() : 0.0);
+        tarifaSacarPaisField.setWidth("280px");
+        tarifaSacarPaisField.setHelperText(
+                "Se multiplica por los días que el cliente declare estar fuera del país. Poner 0 para deshabilitar.");
+        tarifaSacarPaisField.setPrefixComponent(new Span("$"));
+
+        Button saveButton = new Button("Guardar Tarifas", VaadinIcon.CHECK.create());
+        saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        saveButton.addClickListener(e -> {
+            try {
+                Settings s = settingsService.getSettings();
+                double val = tarifaSacarPaisField.getValue() != null ? tarifaSacarPaisField.getValue() : 0.0;
+                s.setTarifaSacarPais(java.math.BigDecimal.valueOf(val));
+                settingsService.updateSettings(s);
+                Notification.show("Tarifas guardadas correctamente", 3000, Notification.Position.BOTTOM_CENTER)
+                        .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+            } catch (Exception ex) {
+                log.error("Error guardando tarifas: {}", ex.getMessage(), ex);
+                Notification.show("Error: " + ex.getMessage(), 5000, Notification.Position.BOTTOM_CENTER)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+            }
+        });
+
+        section.add(sectionTitle, description, tarifaSacarPaisField, saveButton);
+        return section;
     }
 
     private void saveGoogleCalendarSettings() {
