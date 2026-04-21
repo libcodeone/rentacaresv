@@ -1,6 +1,7 @@
 package com.rentacaresv.rental.application;
 
 import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.Min;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -49,6 +50,18 @@ public class CreateRentalCommand {
     
     @Size(max = 20, message = "El teléfono no puede tener más de 20 caracteres")
     private String contactPhone;
+
+    // ========================================
+    // Salida del país (opcional)
+    // ========================================
+
+    private boolean sacarPais = false;
+
+    @Size(max = 300)
+    private String destinosFueraPais;
+
+    @Min(value = 0)
+    private int diasFueraPais = 0;
 
     /**
      * Valida que la fecha de fin sea después de la fecha de inicio

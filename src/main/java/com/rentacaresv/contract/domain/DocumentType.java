@@ -5,7 +5,7 @@ package com.rentacaresv.contract.domain;
  */
 public enum DocumentType {
     
-    DUI("DUI", "Documento Único de Identidad"),
+    DUI("Documento de Identidad", "Documento de Identidad"),
     PASSPORT("Pasaporte", "Pasaporte"),
     LICENSE("Licencia", "Licencia de Conducir"),
     RESIDENCE("Residencia", "Carnet de Residencia"),

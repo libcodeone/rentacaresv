@@ -156,6 +156,15 @@ public class ReservationConfirmationPdfGenerator {
         if (rental.getContactPhone() != null && !rental.getContactPhone().isBlank())
             addRow(t, "Teléfono de contacto", rental.getContactPhone());
 
+        // Salida del país
+        if (Boolean.TRUE.equals(rental.getSacarPais())) {
+            addRow(t, "Salida del país", "Autorizado");
+            if (rental.getDestinosFueraPais() != null && !rental.getDestinosFueraPais().isBlank())
+                addRow(t, "Destinos", rental.getDestinosFueraPais());
+            if (rental.getDiasFueraPais() != null && rental.getDiasFueraPais() > 0)
+                addRow(t, "Días fuera del país", rental.getDiasFueraPais() + " día(s)");
+        }
+
         doc.add(t.setMarginBottom(16));
     }
 
@@ -167,6 +176,9 @@ public class ReservationConfirmationPdfGenerator {
         Table t = twoColTable();
         addRow(t, "Tarifa diaria",  "$" + rental.getDailyRate());
         addRow(t, "Días",           rental.getTotalDays() + " día(s)");
+        if (rental.getCargoSacarPais() != null && rental.getCargoSacarPais().compareTo(java.math.BigDecimal.ZERO) > 0) {
+            addRow(t, "Cargo por salida del país", "$" + rental.getCargoSacarPais());
+        }
         addRow(t, "Total estimado", "$" + rental.getTotalAmount());
 
         doc.add(t.setMarginBottom(8));
@@ -182,7 +194,7 @@ public class ReservationConfirmationPdfGenerator {
 
         String[] steps = {
             "Recibirá una llamada o mensaje de confirmación para coordinar el lugar y hora de entrega.",
-            "En el momento de la entrega, presente su DUI o pasaporte y licencia de conducir originales.",
+            "En el momento de la entrega, presente su documento de identidad o pasaporte y licencia de conducir originales.",
             "Se realizará una inspección del vehículo y se firmará el contrato de arrendamiento.",
             "En caso de necesitar cancelar o modificar su reserva, contáctenos con anticipación."
         };
