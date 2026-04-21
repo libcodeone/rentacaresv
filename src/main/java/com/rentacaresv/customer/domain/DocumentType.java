@@ -26,7 +26,7 @@ public enum DocumentType {
 
     public String getLabel() {
         return switch (this) {
-            case DUI -> "DUI";
+            case DUI -> "Documento de Identidad";
             case PASSPORT -> "Pasaporte";
             case DRIVERS_LICENSE -> "Licencia de Conducir";
             case OTHER -> "Otro";

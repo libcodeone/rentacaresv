@@ -309,7 +309,7 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         documentTypeCombo.setReadOnly(isReadOnly);
         form.add(documentTypeCombo);
 
-        documentNumberField = new TextField("DUI");
+        documentNumberField = new TextField("Documento de Identidad");
         if (customer.getDocumentType() == com.rentacaresv.customer.domain.DocumentType.DUI) {
             documentNumberField.setValue(customer.getDocumentNumber() != null ? customer.getDocumentNumber() : "");
         }
@@ -403,8 +403,8 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
 
             uploadsGrid.add(createDocumentUpload("Licencia (Frente)", "license-front", contract.getLicenseFrontUrl()));
             uploadsGrid.add(createDocumentUpload("Licencia (Reverso)", "license-back", contract.getLicenseBackUrl()));
-            uploadsGrid.add(createDocumentUpload("DUI/Pasaporte (Frente)", "doc-front", contract.getDocumentFrontUrl()));
-            uploadsGrid.add(createDocumentUpload("DUI/Pasaporte (Reverso)", "doc-back", contract.getDocumentBackUrl()));
+            uploadsGrid.add(createDocumentUpload("Doc. de Identidad / Pasaporte (Frente)", "doc-front", contract.getDocumentFrontUrl()));
+            uploadsGrid.add(createDocumentUpload("Doc. de Identidad / Pasaporte (Reverso)", "doc-back", contract.getDocumentBackUrl()));
 
             section.add(uploadsGrid);
 
@@ -627,7 +627,7 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         additionalDriverLicenseField.setReadOnly(isReadOnly);
         form.add(additionalDriverLicenseField);
 
-        additionalDriverDuiField = new TextField("DUI");
+        additionalDriverDuiField = new TextField("Documento de Identidad");
         additionalDriverDuiField.setReadOnly(isReadOnly);
         form.add(additionalDriverDuiField);
 

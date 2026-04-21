@@ -9,6 +9,7 @@ import com.rentacaresv.rental.domain.RentalStatus;
 import com.rentacaresv.rental.infrastructure.RentalMapper;
 import com.rentacaresv.rental.infrastructure.RentalRepository;
 import com.rentacaresv.security.AuthenticatedUser;
+import com.rentacaresv.settings.application.SettingsCache;
 import com.rentacaresv.vehicle.domain.Vehicle;
 import com.rentacaresv.vehicle.infrastructure.VehicleRepository;
 import jakarta.validation.Valid;
@@ -42,6 +43,7 @@ public class RentalService {
     private final RentalMapper rentalMapper;
     private final GoogleCalendarService googleCalendarService;
     private final AuthenticatedUser authenticatedUser;
+    private final SettingsCache settingsCache;
 
     // Domain Service (Java puro, sin @Service)
     private final RentalPriceCalculator priceCalculator = new RentalPriceCalculator();
@@ -94,6 +96,16 @@ public class RentalService {
         BigDecimal totalAmount = priceCalculator.calculateTotalPrice(
                 vehicle, customer, command.getStartDate(), command.getEndDate());
 
+        // 4.1 Cargo adicional por salida del país
+        BigDecimal cargoSacarPais = BigDecimal.ZERO;
+        if (command.isSacarPais() && command.getDiasFueraPais() > 0) {
+            BigDecimal tarifaSacarPais = settingsCache.getSettings().getTarifaSacarPais();
+            if (tarifaSacarPais != null && tarifaSacarPais.compareTo(BigDecimal.ZERO) > 0) {
+                cargoSacarPais = tarifaSacarPais.multiply(BigDecimal.valueOf(command.getDiasFueraPais()));
+                totalAmount = totalAmount.add(cargoSacarPais);
+            }
+        }
+
         // 5. Generar número de contrato
         String contractNumber = generateContractNumber();
 
@@ -110,6 +122,10 @@ public class RentalService {
                 .amountPaid(BigDecimal.ZERO)
                 .status(RentalStatus.PENDING)
                 .notes(command.getNotes())
+                .sacarPais(command.isSacarPais())
+                .destinosFueraPais(command.getDestinosFueraPais())
+                .diasFueraPais(command.getDiasFueraPais() > 0 ? command.getDiasFueraPais() : null)
+                .cargoSacarPais(cargoSacarPais.compareTo(BigDecimal.ZERO) > 0 ? cargoSacarPais : null)
                 .build();
 
         // 7. Persistir
