@@ -47,6 +47,9 @@ public class Customer {
     @Column(name = "address", columnDefinition = "TEXT")
     private String address;
 
+    @Column(name = "address_foreign", length = 500)
+    private String addressForeign;
+
     @Column(name = "birth_date")
     private LocalDate birthDate;
 

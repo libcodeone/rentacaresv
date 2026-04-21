@@ -54,6 +54,11 @@ public class RentalMapper {
                 .travelItinerary(rental.getTravelItinerary())
                 .accommodation(rental.getAccommodation())
                 .contactPhone(rental.getContactPhone())
+                // Salida del país
+                .sacarPais(rental.getSacarPais())
+                .destinosFueraPais(rental.getDestinosFueraPais())
+                .diasFueraPais(rental.getDiasFueraPais())
+                .cargoSacarPais(rental.getCargoSacarPais())
                 // Campos calculados
                 .actualDays(rental.getActualDays())
                 .isDelayed(rental.isDelayed())

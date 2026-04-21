@@ -1,9 +1,11 @@
 package com.rentacaresv.views;
 
 import com.rentacaresv.settings.application.SettingsService;
+import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.html.Image;
 import com.vaadin.flow.component.login.LoginForm;
+import com.vaadin.flow.component.login.LoginI18n;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
@@ -30,6 +32,29 @@ public class LoginView extends VerticalLayout implements BeforeEnterObserver {
         setJustifyContentMode(JustifyContentMode.CENTER);
 
         login.setAction("login");
+        login.setForgotPasswordButtonVisible(true);
+        
+        // Configurar textos en español
+        LoginI18n i18n = LoginI18n.createDefault();
+        LoginI18n.Form i18nForm = i18n.getForm();
+        i18nForm.setTitle("Iniciar Sesión");
+        i18nForm.setUsername("Usuario");
+        i18nForm.setPassword("Contraseña");
+        i18nForm.setSubmit("Ingresar");
+        i18nForm.setForgotPassword("¿Olvidaste tu contraseña?");
+        i18n.setForm(i18nForm);
+        
+        LoginI18n.ErrorMessage i18nErrorMessage = i18n.getErrorMessage();
+        i18nErrorMessage.setTitle("Usuario o contraseña incorrectos");
+        i18nErrorMessage.setMessage("Verifica tus credenciales e intenta de nuevo.");
+        i18n.setErrorMessage(i18nErrorMessage);
+        
+        login.setI18n(i18n);
+        
+        // Manejar clic en "Olvidaste tu contraseña"
+        login.addForgotPasswordListener(e -> {
+            getUI().ifPresent(ui -> ui.navigate("forgot-password"));
+        });
 
         // Obtener logo dinámicamente
         String logoUrl = getLogoUrl();

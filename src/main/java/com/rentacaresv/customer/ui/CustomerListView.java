@@ -137,6 +137,13 @@ public class CustomerListView extends VerticalLayout {
         grid = new Grid<>(CustomerDTO.class, false);
         grid.setSizeFull();
         
+        // Columna de Acciones (PRIMERA - FIJA)
+        grid.addComponentColumn(this::createActionButtons)
+            .setHeader("Acciones")
+            .setWidth("150px")
+            .setFlexGrow(0)
+            .setFrozen(true);
+        
         // Columnas
         grid.addColumn(CustomerDTO::getFullName)
             .setHeader("Nombre Completo")
@@ -177,11 +184,6 @@ public class CustomerListView extends VerticalLayout {
             .setWidth("100px")
             .setFlexGrow(0);
         
-        grid.addComponentColumn(this::createActionButtons)
-            .setHeader("Acciones")
-            .setWidth("200px")
-            .setFlexGrow(0);
-        
         // Estilo
         grid.addThemeVariants();
         grid.getStyle()
@@ -214,7 +216,7 @@ public class CustomerListView extends VerticalLayout {
 
     private String getDocumentTypeLabel(String type) {
         return switch (type) {
-            case "DUI" -> "DUI";
+            case "DUI" -> "Documento de Identidad";
             case "PASSPORT" -> "Pasaporte";
             case "DRIVERS_LICENSE" -> "Licencia";
             case "OTHER" -> "Otro";

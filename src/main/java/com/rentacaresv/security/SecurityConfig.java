@@ -53,8 +53,18 @@ public class SecurityConfig {
                     "/manifest.webmanifest",// PWA manifest
                     "/sw.js",               // Service worker
                     "/offline.html",        // Página offline
-                    "/api/google-calendar/callback" // OAuth2 callback de Google Calendar
-                ).permitAll());
+                    "/api/google-calendar/callback", // OAuth2 callback de Google Calendar
+                    "/forgot-password",    // Recuperación de contraseña
+                    "/reset-password",     // Restablecer contraseña
+                    "/api/public/**"       // API pública para la web
+                ).permitAll())
+                .authorizeHttpRequests(authorize -> authorize
+                    .requestMatchers("/api/admin/**").hasRole("ADMIN"));
+
+        // Deshabilitar CSRF para endpoints REST (evita 403 en llamadas externas)
+        http.csrf(csrf -> csrf
+                .ignoringRequestMatchers("/api/public/**")
+                .ignoringRequestMatchers("/api/admin/**"));
 
         // Configuración de Vaadin Security con login view
         http.with(VaadinSecurityConfigurer.vaadin(), configurer -> configurer

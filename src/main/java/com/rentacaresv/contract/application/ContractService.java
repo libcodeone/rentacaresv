@@ -3,9 +3,12 @@ package com.rentacaresv.contract.application;
 import com.rentacaresv.contract.domain.*;
 import com.rentacaresv.contract.infrastructure.*;
 import com.rentacaresv.rental.domain.Rental;
+import com.rentacaresv.rental.domain.photo.RentalPhotoType;
+import com.rentacaresv.rental.infrastructure.RentalPhotoRepository;
 import com.rentacaresv.rental.infrastructure.RentalRepository;
 import com.rentacaresv.shared.storage.FileStorageService;
 import com.rentacaresv.shared.storage.FolderType;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -15,8 +18,12 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Servicio de aplicación para gestión de Contratos Digitales
@@ -28,10 +35,9 @@ public class ContractService {
 
     private final ContractRepository contractRepository;
     private final ContractAccessoryRepository contractAccessoryRepository;
-    private final ContractDamageMarkRepository contractDamageMarkRepository;
     private final AccessoryCatalogRepository accessoryCatalogRepository;
-    private final VehicleDiagramRepository vehicleDiagramRepository;
     private final RentalRepository rentalRepository;
+    private final RentalPhotoRepository rentalPhotoRepository;
     private final FileStorageService fileStorageService;
     private final ContractPdfGenerator pdfGenerator;
     private final ContractEmailService emailService;
@@ -49,19 +55,18 @@ public class ContractService {
     public Optional<Contract> findByToken(String token) {
         // Primero cargar el contrato básico con rental, vehicle, customer
         Optional<Contract> contractOpt = contractRepository.findByTokenBasic(token);
-        
+
         if (contractOpt.isEmpty()) {
             return Optional.empty();
         }
-        
+
         Contract contract = contractOpt.get();
-        
-        // Cargar accesorios (Hibernate los inicializa en la misma sesión)
-        contractRepository.findByIdWithAccessories(contract.getId());
-        
-        // Cargar marcas de daño
-        contractRepository.findByIdWithDamageMarks(contract.getId());
-        
+        Long contractId = contract.getId();
+
+        // Cargar accesorios y forzar inicialización
+        contractRepository.findByIdWithAccessories(contractId);
+        log.debug("✅ Accesorios cargados: {}", contract.getAccessories().size());
+
         return Optional.of(contract);
     }
 
@@ -71,19 +76,17 @@ public class ContractService {
     @Transactional(readOnly = true)
     public Optional<Contract> findByIdWithRelations(Long id) {
         Optional<Contract> contractOpt = contractRepository.findByIdBasic(id);
-        
+
         if (contractOpt.isEmpty()) {
             return Optional.empty();
         }
-        
+
         Contract contract = contractOpt.get();
-        
-        // Cargar accesorios
-        contractRepository.findByIdWithAccessories(contract.getId());
-        
-        // Cargar marcas de daño
-        contractRepository.findByIdWithDamageMarks(contract.getId());
-        
+
+        // Cargar accesorios y forzar inicialización
+        contractRepository.findByIdWithAccessories(id);
+        log.debug("✅ Accesorios cargados para PDF: {}", contract.getAccessories().size());
+
         return Optional.of(contract);
     }
 
@@ -113,13 +116,6 @@ public class ContractService {
      */
     public List<AccessoryCatalog> getActiveAccessories() {
         return accessoryCatalogRepository.findAllActiveOrdered();
-    }
-
-    /**
-     * Obtiene el diagrama para un tipo de vehículo
-     */
-    public Optional<VehicleDiagram> getDiagramForVehicleType(com.rentacaresv.vehicle.domain.VehicleType type) {
-        return vehicleDiagramRepository.findByVehicleTypeAndIsActiveTrue(type);
     }
 
     /**
@@ -157,24 +153,32 @@ public class ContractService {
                 .expiresAt(LocalDateTime.now().plusDays(7))
                 .build();
 
-        contract = contractRepository.save(contract);
+        // Los accesorios se agregarán desde la vista pública la primera vez que se
+        // llame a updateAccessories()
+        // El contrato inicia SIN accesorios
 
-        // Agregar accesorios del catálogo
-        List<AccessoryCatalog> accessories = accessoryCatalogRepository.findAllActiveOrdered();
-        for (AccessoryCatalog catalogItem : accessories) {
-            ContractAccessory accessory = ContractAccessory.builder()
-                    .contract(contract)
-                    .accessoryCatalogId(catalogItem.getId())
-                    .accessoryName(catalogItem.getName())
-                    .isPresent(true) // Por defecto todos presentes
-                    .displayOrder(catalogItem.getDisplayOrder())
-                    .build();
-            contract.addAccessory(accessory);
+        // Si la renta viene de la web, copiar las fotos de documentos al contrato
+        if ("WEB".equals(rental.getSource())) {
+            var photos = rentalPhotoRepository.findByRentalId(rentalId);
+            for (var photo : photos) {
+                switch (photo.getPhotoType()) {
+                    case DOCUMENT_ID_FRONT -> contract.setDocumentFrontUrl(photo.getPhotoUrl());
+                    case DOCUMENT_ID_BACK -> contract.setDocumentBackUrl(photo.getPhotoUrl());
+                    case DOCUMENT_LICENSE_FRONT -> contract.setLicenseFrontUrl(photo.getPhotoUrl());
+                    case DOCUMENT_LICENSE_BACK -> contract.setLicenseBackUrl(photo.getPhotoUrl());
+                    default -> { }
+                }
+            }
+            contract.setDocumentNumber(rental.getCustomer().getDocumentNumber());
+
+            Contract savedContract = contractRepository.save(contract);
+            log.info("Fotos de reserva web copiadas al contrato {}", savedContract.getToken());
+            return savedContract;
         }
 
         contract = contractRepository.save(contract);
 
-        log.info("✅ Contrato creado con token: {}", contract.getToken());
+        log.info("✅ Contrato creado con token: {} (sin accesorios)", contract.getToken());
         return contract;
     }
 
@@ -193,9 +197,9 @@ public class ContractService {
      * Actualiza la información del documento de identidad
      */
     @Transactional
-    public Contract updateDocumentInfo(String token, DocumentType documentType, 
-                                        String documentNumber, String frontPhotoBase64, 
-                                        String backPhotoBase64) {
+    public Contract updateDocumentInfo(String token, DocumentType documentType,
+            String documentNumber, String frontPhotoBase64,
+            String backPhotoBase64) {
         Contract contract = findByToken(token)
                 .orElseThrow(() -> new IllegalArgumentException("Contrato no encontrado"));
 
@@ -205,17 +209,18 @@ public class ContractService {
 
         String frontUrl = null;
         String backUrl = null;
+        String contractNumber = contract.getRental().getContractNumber();
 
         // Subir foto frontal
         if (frontPhotoBase64 != null && !frontPhotoBase64.isEmpty()) {
-            frontUrl = uploadBase64Image(frontPhotoBase64, "doc_front_" + contract.getId(), 
-                    FolderType.CONTRACT_DOCUMENTS);
+            frontUrl = uploadBase64Image(frontPhotoBase64, "doc_front_" + contract.getId(),
+                    FolderType.CONTRACT_DOCUMENTS, contractNumber);
         }
 
         // Subir foto trasera (opcional)
         if (backPhotoBase64 != null && !backPhotoBase64.isEmpty()) {
-            backUrl = uploadBase64Image(backPhotoBase64, "doc_back_" + contract.getId(), 
-                    FolderType.CONTRACT_DOCUMENTS);
+            backUrl = uploadBase64Image(backPhotoBase64, "doc_back_" + contract.getId(),
+                    FolderType.CONTRACT_DOCUMENTS, contractNumber);
         }
 
         contract.updateDocumentInfo(documentType, documentNumber, frontUrl, backUrl);
@@ -224,6 +229,8 @@ public class ContractService {
 
     /**
      * Actualiza el checklist de accesorios
+     * IMPORTANTE: El DTO ahora usa accessoryCatalogId en lugar del ID de
+     * ContractAccessory
      */
     @Transactional
     public Contract updateAccessories(String token, List<ContractAccessoryDTO> accessoriesDTO) {
@@ -234,63 +241,55 @@ public class ContractService {
             throw new IllegalStateException("El contrato no puede ser modificado");
         }
 
-        // Actualizar cada accesorio
+        log.info("📦 updateAccessories - DTOs recibidos: {}", accessoriesDTO.size());
+        log.info("📦 updateAccessories - Accesorios en contrato antes: {}", contract.getAccessories().size());
+
+        // Crear mapa de DTOs por catalogId para acceso rápido
+        Map<Long, ContractAccessoryDTO> dtoMap = accessoriesDTO.stream()
+                .collect(Collectors.toMap(
+                        ContractAccessoryDTO::getCatalogId,
+                        dto -> dto));
+
+        // Crear mapa de accesorios existentes por catalogId
+        Map<Long, ContractAccessory> existingMap = new HashMap<>();
+        for (ContractAccessory acc : contract.getAccessories()) {
+            if (acc.getAccessoryCatalogId() != null) {
+                existingMap.put(acc.getAccessoryCatalogId(), acc);
+            }
+        }
+
+        log.info("📦 Accesorios existentes en contrato: {}", existingMap.size());
+
+        // Actualizar o crear accesorios
         for (ContractAccessoryDTO dto : accessoriesDTO) {
-            contract.getAccessories().stream()
-                    .filter(a -> a.getId().equals(dto.getId()))
-                    .findFirst()
-                    .ifPresent(accessory -> {
-                        accessory.setIsPresent(dto.getIsPresent());
-                        accessory.setObservations(dto.getObservations());
-                    });
+            Long catalogId = dto.getCatalogId();
+
+            if (existingMap.containsKey(catalogId)) {
+                // ACTUALIZAR existente
+                ContractAccessory existing = existingMap.get(catalogId);
+                existing.setIsPresent(dto.getIsPresent());
+                existing.setObservations(dto.getObservations());
+                log.debug("🔄 Actualizado: {} (isPresent={})", existing.getAccessoryName(), dto.getIsPresent());
+            } else {
+                // CREAR nuevo
+                Optional<AccessoryCatalog> catalogItem = accessoryCatalogRepository.findById(catalogId);
+                if (catalogItem.isPresent()) {
+                    ContractAccessory newAccessory = ContractAccessory.builder()
+                            .accessoryCatalogId(catalogItem.get().getId())
+                            .accessoryName(catalogItem.get().getName())
+                            .isPresent(dto.getIsPresent())
+                            .observations(dto.getObservations())
+                            .displayOrder(catalogItem.get().getDisplayOrder())
+                            .build();
+                    contract.addAccessory(newAccessory);
+                    log.debug("➕ Agregado: {} (isPresent={})", catalogItem.get().getName(), dto.getIsPresent());
+                } else {
+                    log.warn("⚠️ No se encontró accesorio en catálogo con ID: {}", catalogId);
+                }
+            }
         }
 
-        // Agregar accesorios personalizados ("Otros")
-        if (accessoriesDTO.stream().anyMatch(dto -> dto.getId() == null && dto.getAccessoryName() != null)) {
-            accessoriesDTO.stream()
-                    .filter(dto -> dto.getId() == null && dto.getAccessoryName() != null)
-                    .forEach(dto -> {
-                        ContractAccessory custom = ContractAccessory.builder()
-                                .contract(contract)
-                                .accessoryName(dto.getAccessoryName())
-                                .isPresent(dto.getIsPresent())
-                                .observations(dto.getObservations())
-                                .displayOrder(999)
-                                .build();
-                        contract.addAccessory(custom);
-                    });
-        }
-
-        return contractRepository.save(contract);
-    }
-
-    /**
-     * Actualiza las marcas de daño en el diagrama
-     */
-    @Transactional
-    public Contract updateDamageMarks(String token, List<ContractDamageMarkDTO> damageMarksDTO) {
-        Contract contract = findByToken(token)
-                .orElseThrow(() -> new IllegalArgumentException("Contrato no encontrado"));
-
-        if (!contract.canBeAccessed()) {
-            throw new IllegalStateException("El contrato no puede ser modificado");
-        }
-
-        // Limpiar marcas existentes y agregar nuevas
-        contract.getDamageMarks().clear();
-
-        for (ContractDamageMarkDTO dto : damageMarksDTO) {
-            ContractDamageMark mark = ContractDamageMark.builder()
-                    .contract(contract)
-                    .positionX(dto.getPositionX())
-                    .positionY(dto.getPositionY())
-                    .damageType(dto.getDamageType())
-                    .description(dto.getDescription())
-                    .isPreExisting(true)
-                    .severity(dto.getSeverity() != null ? dto.getSeverity() : 1)
-                    .build();
-            contract.addDamageMark(mark);
-        }
+        log.info("📦 updateAccessories - Accesorios en contrato después: {}", contract.getAccessories().size());
 
         return contractRepository.save(contract);
     }
@@ -316,19 +315,19 @@ public class ContractService {
      */
     @Transactional
     public Contract updateAdditionalInfo(String token,
-                                          String deliveryLocation,
-                                          String addressElSalvador,
-                                          String addressForeign,
-                                          String phoneUsa,
-                                          String phoneFamily,
-                                          PaymentMethod paymentMethod,
-                                          java.math.BigDecimal depositAmount,
-                                          java.math.BigDecimal accidentDeductible,
-                                          java.math.BigDecimal theftDeductible,
-                                          String additionalDriverName,
-                                          String additionalDriverLicense,
-                                          String additionalDriverDui,
-                                          String observations) {
+            String deliveryLocation,
+            String addressElSalvador,
+            String addressForeign,
+            String phoneUsa,
+            String phoneFamily,
+            PaymentMethod paymentMethod,
+            java.math.BigDecimal depositAmount,
+            java.math.BigDecimal accidentDeductible,
+            java.math.BigDecimal theftDeductible,
+            String additionalDriverName,
+            String additionalDriverLicense,
+            String additionalDriverDui,
+            String observations) {
         Contract contract = findByToken(token)
                 .orElseThrow(() -> new IllegalArgumentException("Contrato no encontrado"));
 
@@ -372,8 +371,8 @@ public class ContractService {
         }
 
         // Subir firma
-        String signatureUrl = uploadBase64Image(signatureBase64, "signature_" + contract.getId(), 
-                FolderType.CONTRACT_SIGNATURES);
+        String signatureUrl = uploadBase64Image(signatureBase64, "signature_" + contract.getId(),
+                FolderType.CONTRACT_SIGNATURES, contract.getRental().getContractNumber());
 
         // Firmar
         contract.sign(signatureUrl, ipAddress, userAgent);
@@ -384,10 +383,10 @@ public class ContractService {
         // Generar PDF y guardarlo
         try {
             contract = generateAndSavePdf(contract);
-            
+
             // Enviar contrato firmado por email (asíncrono)
             emailService.sendSignedContractEmail(contract);
-            
+
         } catch (Exception e) {
             log.error("Error generando PDF o enviando email: {}", e.getMessage(), e);
             // No lanzamos excepción para no bloquear la firma
@@ -403,23 +402,32 @@ public class ContractService {
     public Contract generateAndSavePdf(Contract contract) {
         try {
             log.info("Generando PDF para contrato ID: {}", contract.getId());
+            log.info("URL firma cliente: {}", contract.getSignatureUrl());
+            log.info("URL firma empleado: {}", contract.getEmployeeSignatureUrl());
 
-            // Recargar el contrato con todas las relaciones para evitar LazyInitializationException
+            // Forzar flush para asegurar que los datos están en BD
+            contractRepository.flush();
+
+            // Recargar el contrato con todas las relaciones para evitar
+            // LazyInitializationException
             Contract fullContract = findByIdWithRelations(contract.getId())
                     .orElseThrow(() -> new IllegalArgumentException("Contrato no encontrado"));
+
+            log.info("Después de recargar - URL firma cliente: {}", fullContract.getSignatureUrl());
+            log.info("Después de recargar - URL firma empleado: {}", fullContract.getEmployeeSignatureUrl());
 
             // Generar PDF
             byte[] pdfBytes = pdfGenerator.generatePdf(fullContract);
 
             // Subir a Digital Ocean Spaces
-            String fileName = "contrato_" + fullContract.getRental().getContractNumber() + "_" + fullContract.getId() + ".pdf";
+            String contractSubFolder = fullContract.getRental().getContractNumber();
+            String fileName = "contrato_" + contractSubFolder + "_" + fullContract.getId() + ".pdf";
             String pdfUrl = fileStorageService.uploadFile(
                     new ByteArrayInputStream(pdfBytes),
                     fileName,
                     "application/pdf",
                     FolderType.CONTRACT_DOCUMENTS,
-                    null
-            );
+                    contractSubFolder);
 
             // Actualizar contrato con URL del PDF
             fullContract.setPdfUrl(pdfUrl);
@@ -441,7 +449,7 @@ public class ContractService {
     public Contract regeneratePdf(Long contractId) {
         Contract contract = contractRepository.findById(contractId)
                 .orElseThrow(() -> new IllegalArgumentException("Contrato no encontrado"));
-        
+
         return generateAndSavePdf(contract);
     }
 
@@ -489,7 +497,7 @@ public class ContractService {
     /**
      * Sube una imagen en Base64 a Digital Ocean Spaces
      */
-    private String uploadBase64Image(String base64Data, String fileName, FolderType folderType) {
+    private String uploadBase64Image(String base64Data, String fileName, FolderType folderType, String subFolder) {
         try {
             // Remover prefijo data:image/xxx;base64, si existe
             String base64Clean = base64Data;
@@ -515,11 +523,242 @@ public class ContractService {
                     fileName + extension,
                     mimeType,
                     folderType,
-                    null
-            );
+                    subFolder);
         } catch (Exception e) {
             log.error("Error subiendo imagen base64: {}", e.getMessage(), e);
             throw new RuntimeException("Error al subir imagen: " + e.getMessage(), e);
+        }
+    }
+
+    // ========================================
+    // DTOs internos
+    // ========================================
+
+    /**
+     * Firma el contrato con firma del cliente Y del empleado
+     */
+    @Transactional
+    public Contract signContractWithEmployeeSignature(String token,
+            String clientSignatureBase64,
+            String employeeSignatureBase64,
+            String employeeName,
+            String ipAddress,
+            String userAgent) {
+        log.info("Firmando contrato con ambas firmas. Token: {}", token);
+
+        Contract contract = findByToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("Contrato no encontrado"));
+
+        if (!contract.canBeSigned()) {
+            throw new IllegalStateException("El contrato no puede ser firmado. Estado: " + contract.getStatus());
+        }
+
+        String contractNumber = contract.getRental().getContractNumber();
+
+        // Subir firma del cliente
+        String clientSignatureUrl = uploadBase64Image(clientSignatureBase64, "signature_client_" + contract.getId(),
+                FolderType.CONTRACT_SIGNATURES, contractNumber);
+
+        // Subir firma del empleado
+        String employeeSignatureUrl = uploadBase64Image(employeeSignatureBase64,
+                "signature_employee_" + contract.getId(),
+                FolderType.CONTRACT_SIGNATURES, contractNumber);
+
+        // Firmar contrato (cliente)
+        contract.sign(clientSignatureUrl, ipAddress, userAgent);
+
+        // Guardar firma y nombre del empleado
+        contract.setEmployeeSignatureUrl(employeeSignatureUrl);
+        contract.setEmployeeName(employeeName);
+
+        contract = contractRepository.save(contract);
+
+        log.info("✅ Contrato firmado con ambas firmas. ID: {}", contract.getId());
+
+        // Generar PDF y guardarlo
+        try {
+            contract = generateAndSavePdf(contract);
+
+            // Enviar contrato firmado por email (asíncrono)
+            emailService.sendSignedContractEmail(contract);
+
+        } catch (Exception e) {
+            log.error("Error generando PDF o enviando email: {}", e.getMessage(), e);
+            // No lanzamos excepción para no bloquear la firma
+        }
+
+        return contract;
+    }
+
+    /**
+     * Actualiza información del documento con fotos de licencia y documento de
+     * identidad
+     */
+    @Transactional
+    public Contract updateDocumentInfoWithPhotos(String token,
+            DocumentType documentType,
+            String documentNumber,
+            String documentFrontBase64,
+            String documentBackBase64,
+            String licenseFrontBase64,
+            String licenseBackBase64) {
+        Contract contract = findByToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("Contrato no encontrado"));
+
+        if (!contract.canBeAccessed()) {
+            throw new IllegalStateException("El contrato no puede ser modificado");
+        }
+
+        String contractNumber = contract.getRental().getContractNumber();
+
+        // Subir foto documento frente
+        String docFrontUrl = replaceDocumentImage(
+                contract.getDocumentFrontUrl(),
+                documentFrontBase64,
+                "doc_front_" + contract.getId(),
+                contractNumber
+        );
+
+        // Subir foto documento reverso
+        String docBackUrl = replaceDocumentImage(
+                contract.getDocumentBackUrl(),
+                documentBackBase64,
+                "doc_back_" + contract.getId(),
+                contractNumber
+        );
+
+        // Subir foto licencia frente
+        String licenseFrontUrl = replaceDocumentImage(
+                contract.getLicenseFrontUrl(),
+                licenseFrontBase64,
+                "license_front_" + contract.getId(),
+                contractNumber
+        );
+
+        // Subir foto licencia reverso
+        String licenseBackUrl = replaceDocumentImage(
+                contract.getLicenseBackUrl(),
+                licenseBackBase64,
+                "license_back_" + contract.getId(),
+                contractNumber
+        );
+
+        // Actualizar contrato
+        contract.setDocumentType(documentType);
+        contract.setDocumentNumber(documentNumber);
+        contract.setDocumentFrontUrl(docFrontUrl);
+        contract.setDocumentBackUrl(docBackUrl);
+        contract.setLicenseFrontUrl(licenseFrontUrl);
+        contract.setLicenseBackUrl(licenseBackUrl);
+
+        return contractRepository.save(contract);
+    }
+
+    private String replaceDocumentImage(String currentUrl, String base64Data, String fileName, String subFolder) {
+        if (base64Data == null || base64Data.isEmpty()) {
+            return currentUrl;
+        }
+
+        String newUrl = uploadBase64Image(base64Data, fileName, FolderType.CONTRACT_DOCUMENTS, subFolder);
+
+        if (currentUrl != null && !currentUrl.isBlank() && !currentUrl.equals(newUrl)) {
+            try {
+                fileStorageService.deleteFile(currentUrl);
+            } catch (Exception e) {
+                log.warn("No se pudo eliminar archivo previo {}: {}", currentUrl, e.getMessage());
+            }
+        }
+
+        return newUrl;
+    }
+
+    // ========================================
+    // Subir video del vehículo
+    // ========================================
+
+    /**
+     * Sube el video del estado del vehículo (entrega)
+     * 
+     * @param token       Token del contrato
+     * @param videoStream Stream del video
+     * @param fileName    Nombre del archivo
+     * @param contentType Tipo de contenido (video/mp4, etc)
+     * @param videoType   Tipo de video: "exterior", "interior", "details"
+     */
+    @Transactional
+    public Contract uploadVehicleVideo(String token, InputStream videoStream, String fileName, String contentType,
+            String videoType) {
+        Contract contract = findByToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("Contrato no encontrado"));
+
+        if (!contract.canBeAccessed()) {
+            throw new IllegalStateException("El contrato no puede ser modificado");
+        }
+
+        log.info("📹 Subiendo video del vehículo ({}) para contrato ID: {}", videoType, contract.getId());
+
+        try {
+            // Nombre del archivo según el tipo
+            String filePrefix = switch (videoType) {
+                case "exterior" -> "video_exterior_";
+                case "interior" -> "video_interior_";
+                case "details" -> "video_detalles_";
+                default -> "video_";
+            };
+
+            String videoUrl = fileStorageService.uploadFile(
+                    videoStream,
+                    filePrefix + contract.getId() + "_" + fileName,
+                    contentType,
+                    FolderType.CONTRACT_VIDEOS,
+                    contract.getRental().getContractNumber());
+
+            // Actualizar el campo correspondiente según el tipo
+            switch (videoType) {
+                case "exterior" -> contract.setVehicleExteriorVideoUrl(videoUrl);
+                case "interior" -> contract.setVehicleInteriorVideoUrl(videoUrl);
+                case "details" -> contract.setVehicleDetailsVideoUrl(videoUrl);
+                default -> throw new IllegalArgumentException("Tipo de video inválido: " + videoType);
+            }
+
+            contract = contractRepository.save(contract);
+
+            log.info("✅ Video {} subido exitosamente: {}", videoType, videoUrl);
+            return contract;
+
+        } catch (Exception e) {
+            log.error("❌ Error subiendo video {}: {}", videoType, e.getMessage(), e);
+            throw new RuntimeException("Error al subir video: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Sube el video del estado del vehículo (devolución)
+     */
+    @Transactional
+    public Contract uploadReturnVideo(Long contractId, InputStream videoStream, String fileName, String contentType) {
+        Contract contract = contractRepository.findById(contractId)
+                .orElseThrow(() -> new IllegalArgumentException("Contrato no encontrado"));
+
+        log.info("📹 Subiendo video de devolución para contrato ID: {}", contract.getId());
+
+        try {
+            String videoUrl = fileStorageService.uploadFile(
+                    videoStream,
+                    "video_devolucion_" + contract.getId() + "_" + fileName,
+                    contentType,
+                    FolderType.CONTRACT_VIDEOS,
+                    contract.getRental().getContractNumber());
+
+            contract.setVehicleReturnVideoUrl(videoUrl);
+            contract = contractRepository.save(contract);
+
+            log.info("✅ Video de devolución subido exitosamente: {}", videoUrl);
+            return contract;
+
+        } catch (Exception e) {
+            log.error("❌ Error subiendo video de devolución: {}", e.getMessage(), e);
+            throw new RuntimeException("Error al subir video: " + e.getMessage(), e);
         }
     }
 
@@ -531,20 +770,10 @@ public class ContractService {
     @lombok.NoArgsConstructor
     @lombok.AllArgsConstructor
     public static class ContractAccessoryDTO {
-        private Long id;
+        private Long catalogId;
         private String accessoryName;
         private Boolean isPresent;
         private String observations;
     }
 
-    @lombok.Data
-    @lombok.NoArgsConstructor
-    @lombok.AllArgsConstructor
-    public static class ContractDamageMarkDTO {
-        private java.math.BigDecimal positionX;
-        private java.math.BigDecimal positionY;
-        private DamageType damageType;
-        private String description;
-        private Integer severity;
-    }
 }

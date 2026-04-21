@@ -197,56 +197,84 @@ public class ContractDialog extends Dialog {
         layout.setPadding(false);
         layout.setSpacing(true);
 
-        // Botón principal: Ver/Editar Contrato
-        Button editBtn = new Button("Abrir Contrato", VaadinIcon.EDIT.create());
+        String baseUrl = getBaseUrl();
+        String editUrl   = baseUrl + "/contract/" + contract.getToken();
+        String publicUrl = baseUrl + "/public/contract/" + contract.getToken();
+
+        // ── Botón principal: Abrir contrato editable (requiere login) ──
+        Button editBtn = new Button("Abrir Contrato (Editable)", VaadinIcon.EDIT.create());
         editBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_LARGE);
         editBtn.setWidthFull();
-        editBtn.addClickListener(e -> {
-            String contractUrl = getBaseUrl() + "/public/contract/" + contract.getToken();
-            UI.getCurrent().getPage().open(contractUrl, "_blank");
+        editBtn.addClickListener(e -> UI.getCurrent().getPage().executeJs(
+                "const url = $0;" +
+                "const w = window.open(url, '_blank');" +
+                "if (!w || w.closed || typeof w.closed === 'undefined') { window.location.href = url; }",
+                editUrl));
+
+        // ── Link editable con copy + WhatsApp ──
+        TextField editUrlField = new TextField("Link editable (requiere login)");
+        editUrlField.setValue(editUrl);
+        editUrlField.setReadOnly(true);
+        editUrlField.setWidthFull();
+
+        HorizontalLayout editActions = new HorizontalLayout();
+        editActions.setSpacing(true);
+
+        Button copyEditBtn = new Button("Copiar", VaadinIcon.COPY.create());
+        copyEditBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
+        copyEditBtn.addClickListener(e -> UI.getCurrent().getPage().executeJs(
+                "navigator.clipboard.writeText($0).then(() => { $1.$server.showCopiedNotification(); });",
+                editUrl, getElement()));
+
+        Button whatsappEditBtn = new Button("WhatsApp", VaadinIcon.COMMENTS.create());
+        whatsappEditBtn.addThemeVariants(ButtonVariant.LUMO_SUCCESS, ButtonVariant.LUMO_SMALL);
+        whatsappEditBtn.addClickListener(e -> {
+            String message = "Contrato de alquiler (para completar): " + editUrl;
+            String waUrl = "https://wa.me/?text=" + java.net.URLEncoder.encode(message, java.nio.charset.StandardCharsets.UTF_8);
+            UI.getCurrent().getPage().open(waUrl, "_blank");
         });
 
-        // URL del contrato (para copiar/compartir)
-        String baseUrl = getBaseUrl();
-        String contractUrl = baseUrl + "/public/contract/" + contract.getToken();
+        editActions.add(copyEditBtn, whatsappEditBtn);
 
-        TextField urlField = new TextField("Link del contrato");
-        urlField.setValue(contractUrl);
-        urlField.setReadOnly(true);
-        urlField.setWidthFull();
+        // ── Separador visual ──
+        Div separator = new Div();
+        separator.getStyle()
+                .set("height", "1px")
+                .set("background", "var(--lumo-contrast-10pct)")
+                .set("margin", "var(--lumo-space-s) 0");
 
-        // Botones secundarios
-        HorizontalLayout actions = new HorizontalLayout();
-        actions.setWidthFull();
-        actions.setJustifyContentMode(FlexComponent.JustifyContentMode.START);
+        // ── Link público read-only ──
+        TextField publicUrlField = new TextField("Link público (solo lectura)");
+        publicUrlField.setValue(publicUrl);
+        publicUrlField.setReadOnly(true);
+        publicUrlField.setWidthFull();
 
-        Button copyBtn = new Button("Copiar", VaadinIcon.COPY.create());
-        copyBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
-        copyBtn.addClickListener(e -> {
-            UI.getCurrent().getPage().executeJs(
-                    "navigator.clipboard.writeText($0).then(() => { " +
-                            "  $1.$server.showCopiedNotification(); " +
-                            "});",
-                    contractUrl, getElement()
-            );
-        });
+        HorizontalLayout publicActions = new HorizontalLayout();
+        publicActions.setSpacing(true);
 
-        Button whatsappBtn = new Button("WhatsApp", VaadinIcon.COMMENTS.create());
-        whatsappBtn.addThemeVariants(ButtonVariant.LUMO_SUCCESS, ButtonVariant.LUMO_SMALL);
-        whatsappBtn.addClickListener(e -> {
-            String message = "¡Hola! Aquí está su contrato de alquiler de vehículo: " + contractUrl;
-            String whatsappUrl = "https://wa.me/?text=" + java.net.URLEncoder.encode(message, java.nio.charset.StandardCharsets.UTF_8);
-            UI.getCurrent().getPage().open(whatsappUrl, "_blank");
-        });
+        Button copyPublicBtn = new Button("Copiar", VaadinIcon.COPY.create());
+        copyPublicBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+        copyPublicBtn.addClickListener(e -> UI.getCurrent().getPage().executeJs(
+                "navigator.clipboard.writeText($0).then(() => { $1.$server.showCopiedNotification(); });",
+                publicUrl, getElement()));
 
-        actions.add(copyBtn, whatsappBtn);
+        Button openPublicBtn = new Button("Abrir", VaadinIcon.EXTERNAL_LINK.create());
+        openPublicBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+        openPublicBtn.addClickListener(e -> UI.getCurrent().getPage().open(publicUrl, "_blank"));
 
-        // Botón cancelar (menos prominente)
+        publicActions.add(copyPublicBtn, openPublicBtn);
+
+        // ── Cancelar contrato ──
         Button cancelBtn = new Button("Cancelar Contrato", VaadinIcon.TRASH.create());
         cancelBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
         cancelBtn.addClickListener(e -> cancelContract());
 
-        layout.add(editBtn, urlField, actions, cancelBtn);
+        layout.add(
+                editBtn,
+                editUrlField, editActions,
+                separator,
+                publicUrlField, publicActions,
+                cancelBtn);
         return layout;
     }
 

@@ -9,6 +9,7 @@ import com.rentacaresv.rental.domain.RentalStatus;
 import com.rentacaresv.rental.infrastructure.RentalMapper;
 import com.rentacaresv.rental.infrastructure.RentalRepository;
 import com.rentacaresv.security.AuthenticatedUser;
+import com.rentacaresv.settings.application.SettingsCache;
 import com.rentacaresv.vehicle.domain.Vehicle;
 import com.rentacaresv.vehicle.infrastructure.VehicleRepository;
 import jakarta.validation.Valid;
@@ -42,6 +43,7 @@ public class RentalService {
     private final RentalMapper rentalMapper;
     private final GoogleCalendarService googleCalendarService;
     private final AuthenticatedUser authenticatedUser;
+    private final SettingsCache settingsCache;
 
     // Domain Service (Java puro, sin @Service)
     private final RentalPriceCalculator priceCalculator = new RentalPriceCalculator();
@@ -65,10 +67,21 @@ public class RentalService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Cliente no encontrado con ID: " + command.getCustomerId()));
 
-        // 2. Validar disponibilidad del vehículo
+        // 2. Validar disponibilidad del vehículo (estado general)
         if (!vehicle.isAvailable()) {
             throw new IllegalStateException(
                     "El vehículo " + vehicle.getLicensePlate() + " no está disponible");
+        }
+
+        // 2.1. Validar disponibilidad del vehículo en las fechas solicitadas
+        if (rentalRepository.hasConflictingRentals(
+                command.getVehicleId(),
+                command.getStartDate(),
+                command.getEndDate())) {
+            throw new IllegalStateException(
+                    "El vehículo " + vehicle.getLicensePlate() + 
+                    " ya está rentado entre las fechas seleccionadas. " +
+                    "Por favor selecciona otras fechas.");
         }
 
         // 3. Validar que el cliente esté activo
@@ -82,6 +95,16 @@ public class RentalService {
         BigDecimal dailyRate = priceCalculator.selectDailyRate(vehicle, customer, days);
         BigDecimal totalAmount = priceCalculator.calculateTotalPrice(
                 vehicle, customer, command.getStartDate(), command.getEndDate());
+
+        // 4.1 Cargo adicional por salida del país
+        BigDecimal cargoSacarPais = BigDecimal.ZERO;
+        if (command.isSacarPais() && command.getDiasFueraPais() > 0) {
+            BigDecimal tarifaSacarPais = settingsCache.getSettings().getTarifaSacarPais();
+            if (tarifaSacarPais != null && tarifaSacarPais.compareTo(BigDecimal.ZERO) > 0) {
+                cargoSacarPais = tarifaSacarPais.multiply(BigDecimal.valueOf(command.getDiasFueraPais()));
+                totalAmount = totalAmount.add(cargoSacarPais);
+            }
+        }
 
         // 5. Generar número de contrato
         String contractNumber = generateContractNumber();
@@ -99,6 +122,10 @@ public class RentalService {
                 .amountPaid(BigDecimal.ZERO)
                 .status(RentalStatus.PENDING)
                 .notes(command.getNotes())
+                .sacarPais(command.isSacarPais())
+                .destinosFueraPais(command.getDestinosFueraPais())
+                .diasFueraPais(command.getDiasFueraPais() > 0 ? command.getDiasFueraPais() : null)
+                .cargoSacarPais(cargoSacarPais.compareTo(BigDecimal.ZERO) > 0 ? cargoSacarPais : null)
                 .build();
 
         // 7. Persistir
@@ -382,7 +409,7 @@ public class RentalService {
      */
     private String generateContractNumber() {
         String date = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String prefix = "RENT-" + date + "-";
+        String prefix = "ADM-" + date + "-";
 
         // Buscar el último número del día
         int sequence = 1;
@@ -461,6 +488,16 @@ public class RentalService {
         return rentals.stream()
                 .map(this::mapToCalendarEvent)
                 .toList();
+    }
+
+    /**
+     * Obtiene todas las rentas activas o pendientes de un vehículo
+     * (para mostrar fechas ocupadas en el calendario de reservas)
+     */
+    @Transactional(readOnly = true)
+    public List<RentalDTO> findActiveRentalsByVehicleId(Long vehicleId) {
+        List<Rental> rentals = rentalRepository.findActiveRentalsByVehicleId(vehicleId);
+        return rentalMapper.toDTOList(rentals);
     }
 
     /**

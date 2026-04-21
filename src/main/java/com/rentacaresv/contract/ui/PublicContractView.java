@@ -3,7 +3,7 @@ package com.rentacaresv.contract.ui;
 import com.rentacaresv.contract.application.ContractService;
 import com.rentacaresv.contract.domain.*;
 import com.rentacaresv.settings.application.SettingsCache;
-import com.vaadin.flow.component.ClientCallable;
+
 import com.vaadin.flow.component.Html;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
@@ -24,11 +24,15 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.component.upload.Upload;
+import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
 import com.vaadin.flow.router.*;
 import com.vaadin.flow.server.VaadinRequest;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
+
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -36,11 +40,14 @@ import java.util.stream.Collectors;
 
 /**
  * Vista del contrato en formato similar al papel.
- * Usada por Admin/Empleado para llenar los datos del contrato.
- * El cliente solo firmará al final.
- * 
- * Accesible mediante: /contract/edit/{contractId} (requiere autenticación)
- * O para firma pública: /public/contract/{token}
+ * Incluye:
+ * - Datos del cliente
+ * - Fotos de documentos (licencia frente/reverso, DUI/pasaporte frente/reverso)
+ * - Datos del vehículo
+ * - Revisión de accesorios con selección rápida
+ * - Video del estado del vehículo
+ * - Términos y condiciones
+ * - Dos firmas (cliente y empleado) con validación de canvas
  */
 @Route("public/contract/:token")
 @PageTitle("Contrato de Alquiler")
@@ -54,7 +61,7 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
 
     private Contract contract;
     private String token;
-    private boolean isReadOnly = false; // Si el contrato ya está firmado
+    private boolean isReadOnly = true; // Vista pública: siempre solo lectura
 
     // Componentes del formulario
     private VerticalLayout mainContent;
@@ -67,7 +74,6 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
     private TextField licenseField;
     private TextField addressElSalvadorField;
     private TextField addressForeignField;
-    private TextField phoneUsaField;
     private TextField phoneFamilyField;
 
     // Sección Vehículo
@@ -94,11 +100,21 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
     // Accesorios
     private Map<Long, Checkbox> accessoryCheckboxes = new HashMap<>();
 
-    // Daños
-    private List<ContractService.ContractDamageMarkDTO> damageMarks = new ArrayList<>();
+    // Videos del vehículo (3 videos)
+    private String vehicleExteriorVideoUrl;
+    private String vehicleInteriorVideoUrl;
+    private String vehicleDetailsVideoUrl;
 
-    // Firma
-    private String signatureBase64;
+    // Firmas (cliente y empleado)
+    private String clientSignatureBase64;
+    private String employeeSignatureBase64;
+    private TextField employeeNameField;
+
+    // Documentos subidos (base64)
+    private String licenseFrontBase64;
+    private String licenseBackBase64;
+    private String documentFrontBase64;
+    private String documentBackBase64;
 
     // Observaciones
     private TextArea observationsField;
@@ -131,13 +147,6 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
 
         contract = contractOpt.get();
 
-        if (contract.getStatus() == ContractStatus.SIGNED) {
-            isReadOnly = true;
-            buildContractView();
-            showAlreadySignedBanner();
-            return;
-        }
-
         if (contract.getStatus() == ContractStatus.EXPIRED || contract.isExpired()) {
             showExpired();
             return;
@@ -149,15 +158,17 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         }
 
         buildContractView();
+
+        if (contract.getStatus() == ContractStatus.SIGNED) {
+            showAlreadySignedBanner();
+        }
     }
 
     private void buildContractView() {
         removeAll();
 
-        // Header con logo y título
         Div header = createHeader();
 
-        // Contenido principal scrolleable
         mainContent = new VerticalLayout();
         mainContent.addClassName("contract-main-content");
         mainContent.setPadding(true);
@@ -166,17 +177,16 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         mainContent.setMaxWidth("900px");
         mainContent.getStyle().set("margin", "0 auto");
 
-        // Construir secciones del contrato
         mainContent.add(createClientSection());
+        mainContent.add(createDocumentsSection());
         mainContent.add(createVehicleSection());
         mainContent.add(createPaymentSection());
         mainContent.add(createAccessoriesSection());
         mainContent.add(createPhysicalReviewSection());
-        mainContent.add(createDamageSection());
+        mainContent.add(createVideoSection());
         mainContent.add(createTermsSection());
         mainContent.add(createSignatureSection());
 
-        // Pre-llenar datos existentes
         populateFormWithContractData();
 
         Scroller scroller = new Scroller(mainContent);
@@ -197,7 +207,6 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
                 .set("border-bottom", "2px solid var(--lumo-primary-color)")
                 .set("box-sizing", "border-box");
 
-        // Contenedor interno con max-width para centrar el contenido
         Div headerInner = new Div();
         headerInner.getStyle()
                 .set("max-width", "1200px")
@@ -212,7 +221,7 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
                 .set("flex-wrap", "wrap")
                 .set("gap", "var(--lumo-space-m)");
 
-        // Logo y nombre empresa
+        // Lado izquierdo: Logo + Nombre
         HorizontalLayout leftSide = new HorizontalLayout();
         leftSide.setAlignItems(FlexComponent.Alignment.CENTER);
         leftSide.setSpacing(true);
@@ -242,12 +251,13 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
                 .set("white-space", "nowrap");
         leftSide.add(title);
 
-        // Info del contrato
-        VerticalLayout rightSide = new VerticalLayout();
-        rightSide.setPadding(false);
-        rightSide.setSpacing(false);
-        rightSide.setAlignItems(FlexComponent.Alignment.END);
+        // Lado derecho: # Contrato + Período (usando Div para mejor control)
+        Div rightSide = new Div();
         rightSide.getStyle()
+                .set("display", "flex")
+                .set("flex-direction", "column")
+                .set("align-items", "flex-end")
+                .set("justify-content", "center")
                 .set("min-width", "200px");
 
         Span contractNum = new Span("Contrato #: " + contract.getRental().getContractNumber());
@@ -286,14 +296,12 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
                 new FormLayout.ResponsiveStep("500px", 2),
                 new FormLayout.ResponsiveStep("800px", 3));
 
-        // Nombre completo
         clientNameField = new TextField("Nombre Completo");
         clientNameField.setValue(customer.getFullName());
         clientNameField.setReadOnly(isReadOnly);
         clientNameField.setWidthFull();
         form.add(clientNameField, 2);
 
-        // Tipo de documento
         documentTypeCombo = new ComboBox<>("Tipo Documento");
         documentTypeCombo.setItems(DocumentType.values());
         documentTypeCombo.setItemLabelGenerator(DocumentType::getLabel);
@@ -301,15 +309,13 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         documentTypeCombo.setReadOnly(isReadOnly);
         form.add(documentTypeCombo);
 
-        // Número DUI
-        documentNumberField = new TextField("DUI");
+        documentNumberField = new TextField("Documento de Identidad");
         if (customer.getDocumentType() == com.rentacaresv.customer.domain.DocumentType.DUI) {
             documentNumberField.setValue(customer.getDocumentNumber() != null ? customer.getDocumentNumber() : "");
         }
         documentNumberField.setReadOnly(isReadOnly);
         form.add(documentNumberField);
 
-        // Pasaporte
         passportField = new TextField("Pasaporte");
         if (customer.getDocumentType() == com.rentacaresv.customer.domain.DocumentType.PASSPORT) {
             passportField.setValue(customer.getDocumentNumber() != null ? customer.getDocumentNumber() : "");
@@ -317,33 +323,25 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         passportField.setReadOnly(isReadOnly);
         form.add(passportField);
 
-        // Licencia
         licenseField = new TextField("Licencia");
         licenseField.setValue(customer.getDriverLicenseNumber() != null ? customer.getDriverLicenseNumber() : "");
         licenseField.setReadOnly(isReadOnly);
         form.add(licenseField);
 
-        // Dirección El Salvador
         addressElSalvadorField = new TextField("Dirección en El Salvador");
         addressElSalvadorField.setValue(customer.getAddress() != null ? customer.getAddress() : "");
         addressElSalvadorField.setReadOnly(isReadOnly);
         form.add(addressElSalvadorField, 2);
 
-        // Dirección extranjero
         addressForeignField = new TextField("Dirección en el Extranjero");
+        addressForeignField.setValue(customer.getAddressForeign() != null ? customer.getAddressForeign() : "");
         addressForeignField.setReadOnly(isReadOnly);
         form.add(addressForeignField, 2);
 
-        // Teléfono USA
-        phoneUsaField = new TextField("Tel. (USA)");
-        phoneUsaField.setReadOnly(isReadOnly);
-        form.add(phoneUsaField);
-
-        // Teléfono familiar
-        phoneFamilyField = new TextField("Tel. (Familiar)");
+        phoneFamilyField = new TextField("Teléfono");
         phoneFamilyField.setValue(customer.getPhone() != null ? customer.getPhone() : "");
         phoneFamilyField.setReadOnly(isReadOnly);
-        form.add(phoneFamilyField);
+        form.add(phoneFamilyField, 2);
 
         section.add(form);
         return section;
@@ -358,6 +356,174 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
             case LICENSE -> DocumentType.LICENSE;
             default -> DocumentType.DUI;
         };
+    }
+
+    // ========================================
+    // SECCIÓN: Documentos del Cliente
+    // ========================================
+
+    private Div createDocumentsSection() {
+        Div section = createSection("DOCUMENTOS DEL CLIENTE");
+
+        Paragraph instruction = new Paragraph(
+                "Suba fotos de los documentos del cliente (licencia de conducir y documento de identidad/pasaporte).");
+        instruction.getStyle().set("color", "var(--lumo-secondary-text-color)");
+        section.add(instruction);
+
+        if (isReadOnly) {
+            HorizontalLayout imagesRow = new HorizontalLayout();
+            imagesRow.setWidthFull();
+            imagesRow.setSpacing(true);
+            imagesRow.getStyle().set("flex-wrap", "wrap");
+
+            if (contract.getLicenseFrontUrl() != null) {
+                imagesRow.add(createDocumentPreview("Licencia (Frente)", contract.getLicenseFrontUrl()));
+            }
+            if (contract.getLicenseBackUrl() != null) {
+                imagesRow.add(createDocumentPreview("Licencia (Reverso)", contract.getLicenseBackUrl()));
+            }
+            if (contract.getDocumentFrontUrl() != null) {
+                imagesRow.add(createDocumentPreview("Documento ID (Frente)", contract.getDocumentFrontUrl()));
+            }
+            if (contract.getDocumentBackUrl() != null) {
+                imagesRow.add(createDocumentPreview("Documento ID (Reverso)", contract.getDocumentBackUrl()));
+            }
+
+            if (imagesRow.getComponentCount() == 0) {
+                section.add(new Paragraph("No se subieron documentos."));
+            } else {
+                section.add(imagesRow);
+            }
+        } else {
+            Div uploadsGrid = new Div();
+            uploadsGrid.getStyle()
+                    .set("display", "grid")
+                    .set("grid-template-columns", "repeat(auto-fill, minmax(200px, 1fr))")
+                    .set("gap", "var(--lumo-space-m)");
+
+            uploadsGrid.add(createDocumentUpload("Licencia (Frente)", "license-front", contract.getLicenseFrontUrl()));
+            uploadsGrid.add(createDocumentUpload("Licencia (Reverso)", "license-back", contract.getLicenseBackUrl()));
+            uploadsGrid.add(createDocumentUpload("Doc. de Identidad / Pasaporte (Frente)", "doc-front", contract.getDocumentFrontUrl()));
+            uploadsGrid.add(createDocumentUpload("Doc. de Identidad / Pasaporte (Reverso)", "doc-back", contract.getDocumentBackUrl()));
+
+            section.add(uploadsGrid);
+
+            Div noteBox = new Div();
+            noteBox.getStyle()
+                    .set("background", "var(--lumo-contrast-5pct)")
+                    .set("padding", "var(--lumo-space-s)")
+                    .set("border-radius", "var(--lumo-border-radius-m)")
+                    .set("margin-top", "var(--lumo-space-m)")
+                    .set("font-size", "var(--lumo-font-size-s)");
+            noteBox.add(new Html(
+                    "<div><strong>Nota:</strong> Si el cliente no es salvadoreño, debe subir foto de su pasaporte.</div>"));
+            section.add(noteBox);
+        }
+
+        return section;
+    }
+
+    private VerticalLayout createDocumentPreview(String label, String imageUrl) {
+        VerticalLayout container = new VerticalLayout();
+        container.setPadding(false);
+        container.setSpacing(false);
+        container.setAlignItems(FlexComponent.Alignment.CENTER);
+        container.setWidth("200px");
+
+        Span labelSpan = new Span(label);
+        labelSpan.getStyle().set("font-weight", "bold").set("font-size", "var(--lumo-font-size-s)");
+
+        Image img = new Image(imageUrl, label);
+        img.setMaxWidth("180px");
+        img.setMaxHeight("120px");
+        img.getStyle()
+                .set("object-fit", "contain")
+                .set("border", "1px solid var(--lumo-contrast-20pct)")
+                .set("border-radius", "var(--lumo-border-radius-m)");
+
+        container.add(labelSpan, img);
+        return container;
+    }
+
+    private VerticalLayout createDocumentUpload(String label, String fieldId, String existingImageUrl) {
+        VerticalLayout container = new VerticalLayout();
+        container.setPadding(false);
+        container.setSpacing(true);
+        container.setAlignItems(FlexComponent.Alignment.CENTER);
+
+        Span labelSpan = new Span(label);
+        labelSpan.getStyle().set("font-weight", "bold").set("font-size", "var(--lumo-font-size-s)");
+
+        Div previewContainer = new Div();
+        previewContainer.setId("preview-" + fieldId);
+        previewContainer.getStyle()
+                .set("width", "180px")
+                .set("height", "120px")
+                .set("border", "2px dashed var(--lumo-contrast-30pct)")
+                .set("border-radius", "var(--lumo-border-radius-m)")
+                .set("display", "flex")
+                .set("align-items", "center")
+                .set("justify-content", "center")
+                .set("background", "var(--lumo-contrast-5pct)")
+                .set("overflow", "hidden");
+
+        renderDocumentPreview(previewContainer, label, existingImageUrl);
+
+        MemoryBuffer buffer = new MemoryBuffer();
+        Upload upload = new Upload(buffer);
+        upload.setAcceptedFileTypes("image/png", "image/jpeg", "image/jpg");
+        upload.setMaxFiles(1);
+        upload.setMaxFileSize(5 * 1024 * 1024);
+
+        Button uploadButton = new Button(existingImageUrl != null ? "Reemplazar foto" : "Subir foto", VaadinIcon.UPLOAD.create());
+        uploadButton.addThemeVariants(ButtonVariant.LUMO_SMALL);
+        upload.setUploadButton(uploadButton);
+        upload.setDropAllowed(false);
+
+        upload.addSucceededListener(event -> {
+            try {
+                InputStream inputStream = buffer.getInputStream();
+                byte[] bytes = inputStream.readAllBytes();
+                String base64 = "data:" + event.getMIMEType() + ";base64," + Base64.getEncoder().encodeToString(bytes);
+
+                switch (fieldId) {
+                    case "license-front" -> licenseFrontBase64 = base64;
+                    case "license-back" -> licenseBackBase64 = base64;
+                    case "doc-front" -> documentFrontBase64 = base64;
+                    case "doc-back" -> documentBackBase64 = base64;
+                }
+
+                renderDocumentPreview(previewContainer, label, base64);
+                uploadButton.setText("Reemplazar foto");
+
+                Notification.show("Imagen cargada: " + label, 2000, Notification.Position.BOTTOM_CENTER);
+
+            } catch (Exception e) {
+                log.error("Error cargando imagen: {}", e.getMessage());
+                Notification.show("Error al cargar imagen", 3000, Notification.Position.MIDDLE)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+            }
+        });
+
+        container.add(labelSpan, previewContainer, upload);
+        return container;
+    }
+
+    private void renderDocumentPreview(Div previewContainer, String label, String imageUrl) {
+        previewContainer.removeAll();
+
+        if (imageUrl == null || imageUrl.isBlank()) {
+            Span placeholder = new Span("Sin imagen");
+            placeholder.getStyle().set("color", "var(--lumo-tertiary-text-color)");
+            previewContainer.add(placeholder);
+            return;
+        }
+
+        Image preview = new Image(imageUrl, label);
+        preview.setMaxWidth("176px");
+        preview.setMaxHeight("116px");
+        preview.getStyle().set("object-fit", "contain");
+        previewContainer.add(preview);
     }
 
     // ========================================
@@ -376,37 +542,31 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
                 new FormLayout.ResponsiveStep("500px", 2),
                 new FormLayout.ResponsiveStep("800px", 4));
 
-        // Vehículo (solo lectura)
         TextField vehicleField = new TextField("Vehículo");
         vehicleField.setValue(vehicle.getBrand() + " " + vehicle.getModel() + " " + vehicle.getYear());
         vehicleField.setReadOnly(true);
         form.add(vehicleField, 2);
 
-        // Placa
         vehiclePlateField = new TextField("Placa");
         vehiclePlateField.setValue(vehicle.getLicensePlate());
         vehiclePlateField.setReadOnly(true);
         form.add(vehiclePlateField);
 
-        // Color
         TextField colorField = new TextField("Color");
         colorField.setValue(vehicle.getColor() != null ? vehicle.getColor() : "");
         colorField.setReadOnly(true);
         form.add(colorField);
 
-        // Lugar de entrega
         deliveryLocationField = new TextField("Lugar de Entrega");
         deliveryLocationField.setPlaceholder("Ej: Aeropuerto");
         deliveryLocationField.setReadOnly(isReadOnly);
         form.add(deliveryLocationField, 2);
 
-        // Días totales
         totalDaysField = new IntegerField("Cantidad de Días");
         totalDaysField.setValue(rental.getTotalDays());
         totalDaysField.setReadOnly(true);
         form.add(totalDaysField);
 
-        // Total
         totalAmountField = new TextField("Total $");
         totalAmountField.setValue(rental.getTotalAmount().toString());
         totalAmountField.setReadOnly(true);
@@ -423,39 +583,38 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
     private Div createPaymentSection() {
         Div section = createSection("FORMA DE PAGO Y GARANTÍAS");
 
+        var vehicle = contract.getRental().getVehicle();
+
         FormLayout form = new FormLayout();
         form.setResponsiveSteps(
                 new FormLayout.ResponsiveStep("0", 1),
                 new FormLayout.ResponsiveStep("500px", 2),
                 new FormLayout.ResponsiveStep("800px", 4));
 
-        // Forma de pago
         paymentMethodCombo = new ComboBox<>("Forma de Pago");
         paymentMethodCombo.setItems(PaymentMethod.values());
         paymentMethodCombo.setItemLabelGenerator(PaymentMethod::getLabel);
         paymentMethodCombo.setReadOnly(isReadOnly);
         form.add(paymentMethodCombo);
 
-        // Depósito
         depositField = new TextField("Depósito $");
         depositField.setReadOnly(isReadOnly);
         form.add(depositField);
 
-        // Deducible por accidente
         accidentDeductibleField = new TextField("Deducible Accidente $");
         accidentDeductibleField.setReadOnly(isReadOnly);
         form.add(accidentDeductibleField);
 
-        // Deducible por robo
-        theftDeductibleField = new TextField("Deducible Robo $");
-        theftDeductibleField.setReadOnly(isReadOnly);
+        Integer theftPercentage = vehicle.getTheftDeductiblePercentage();
+        theftDeductibleField = new TextField("Deducible Robo");
+        theftDeductibleField.setValue(theftPercentage + "% del valor del vehículo");
+        theftDeductibleField.setReadOnly(true);
+        theftDeductibleField.setHelperText("Según configuración del vehículo");
         form.add(theftDeductibleField);
 
-        // Separador
         Hr separator = new Hr();
         form.add(separator, 4);
 
-        // Conductor adicional
         Span additionalTitle = new Span("Conductor Adicional (opcional)");
         additionalTitle.getStyle().set("font-weight", "bold");
         form.add(additionalTitle, 4);
@@ -468,7 +627,7 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         additionalDriverLicenseField.setReadOnly(isReadOnly);
         form.add(additionalDriverLicenseField);
 
-        additionalDriverDuiField = new TextField("DUI");
+        additionalDriverDuiField = new TextField("Documento de Identidad");
         additionalDriverDuiField.setReadOnly(isReadOnly);
         form.add(additionalDriverDuiField);
 
@@ -483,7 +642,29 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
     private Div createAccessoriesSection() {
         Div section = createSection("REVISIÓN DE ACCESORIOS");
 
-        // Crear grid de checkboxes similar al papel
+        if (!isReadOnly) {
+            HorizontalLayout quickActions = new HorizontalLayout();
+            quickActions.setSpacing(true);
+            quickActions.getStyle().set("margin-bottom", "var(--lumo-space-m)");
+
+            Button selectAllBtn = new Button("Seleccionar Todos", VaadinIcon.CHECK_SQUARE.create());
+            selectAllBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_PRIMARY);
+            selectAllBtn.addClickListener(e -> {
+                accessoryCheckboxes.values().forEach(cb -> cb.setValue(true));
+                Notification.show("Todos los accesorios seleccionados", 2000, Notification.Position.BOTTOM_CENTER);
+            });
+
+            Button selectNoneBtn = new Button("Deseleccionar Todos", VaadinIcon.THIN_SQUARE.create());
+            selectNoneBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+            selectNoneBtn.addClickListener(e -> {
+                accessoryCheckboxes.values().forEach(cb -> cb.setValue(false));
+                Notification.show("Todos los accesorios deseleccionados", 2000, Notification.Position.BOTTOM_CENTER);
+            });
+
+            quickActions.add(selectAllBtn, selectNoneBtn);
+            section.add(quickActions);
+        }
+
         Div accessoriesGrid = new Div();
         accessoriesGrid.addClassName("accessories-grid");
         accessoriesGrid.getStyle()
@@ -491,29 +672,61 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
                 .set("grid-template-columns", "repeat(auto-fill, minmax(200px, 1fr))")
                 .set("gap", "var(--lumo-space-s)");
 
-        // Obtener accesorios del contrato y ordenarlos
-        List<ContractAccessory> accessories = contract.getAccessories().stream()
-                .sorted(Comparator.comparingInt(a -> a.getDisplayOrder() != null ? a.getDisplayOrder() : 0))
-                .collect(Collectors.toList());
+        // MODO EDICIÓN: Cargar TODOS los accesorios del catálogo
+        if (!isReadOnly) {
+            // Obtener todos los accesorios del catálogo activos
+            List<AccessoryCatalog> catalogAccessories = contractService.getActiveAccessories();
+            
+            // Crear un mapa de los accesorios ya asociados al contrato para saber cuáles están presentes
+            Map<Long, Boolean> contractAccessoriesMap = contract.getAccessories().stream()
+                    .collect(Collectors.toMap(
+                            ContractAccessory::getAccessoryCatalogId,
+                            acc -> acc.getIsPresent() != null ? acc.getIsPresent() : true
+                    ));
+            
+            // Mostrar todos los accesorios del catálogo
+            for (AccessoryCatalog catalogItem : catalogAccessories) {
+                HorizontalLayout row = new HorizontalLayout();
+                row.setAlignItems(FlexComponent.Alignment.CENTER);
+                row.setPadding(false);
+                row.setSpacing(true);
 
-        for (ContractAccessory acc : accessories) {
-            HorizontalLayout row = new HorizontalLayout();
-            row.setAlignItems(FlexComponent.Alignment.CENTER);
-            row.setPadding(false);
-            row.setSpacing(true);
+                Checkbox checkbox = new Checkbox(catalogItem.getName());
+                // Si el accesorio ya está en el contrato, usar su valor, sino por defecto true
+                checkbox.setValue(contractAccessoriesMap.getOrDefault(catalogItem.getId(), true));
+                checkbox.setReadOnly(false);
+                
+                // Usar el ID del catálogo como clave (no el ID del ContractAccessory)
+                accessoryCheckboxes.put(catalogItem.getId(), checkbox);
 
-            Checkbox checkbox = new Checkbox(acc.getAccessoryName());
-            checkbox.setValue(acc.getIsPresent());
-            checkbox.setReadOnly(isReadOnly);
-            accessoryCheckboxes.put(acc.getId(), checkbox);
+                row.add(checkbox);
+                accessoriesGrid.add(row);
+            }
+        } 
+        // MODO LECTURA: Mostrar solo los accesorios asociados al contrato
+        else {
+            List<ContractAccessory> accessories = contract.getAccessories().stream()
+                    .sorted(Comparator.comparingInt(a -> a.getDisplayOrder() != null ? a.getDisplayOrder() : 0))
+                    .collect(Collectors.toList());
 
-            row.add(checkbox);
-            accessoriesGrid.add(row);
+            for (ContractAccessory acc : accessories) {
+                HorizontalLayout row = new HorizontalLayout();
+                row.setAlignItems(FlexComponent.Alignment.CENTER);
+                row.setPadding(false);
+                row.setSpacing(true);
+
+                Checkbox checkbox = new Checkbox(acc.getAccessoryName());
+                checkbox.setValue(acc.getIsPresent() != null ? acc.getIsPresent() : true);
+                checkbox.setReadOnly(true);
+                // No necesitamos guardar en el mapa en modo lectura
+
+                row.add(checkbox);
+                accessoriesGrid.add(row);
+            }
         }
 
         section.add(accessoriesGrid);
 
-        // Nota importante
         Div noteBox = new Div();
         noteBox.addClassName("note-box");
         noteBox.getStyle()
@@ -526,7 +739,7 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         noteBox.add(new Html(
                 "<div><strong>NOTA:</strong>" +
                         "<ul style='margin: var(--lumo-space-xs) 0; padding-left: var(--lumo-space-l);'>" +
-                        "<li>Entregar lavado el vehículo, de lo contrario se cobrará extra <strong>$5.00</strong></li>"
+                        "<li>Entregar lavado el vehículo, de lo contrario se cobrará entre <strong>$5 a $15</strong> dependiendo de cómo se entregue de sucio</li>"
                         +
                         "<li>Manchas o derrame de líquido en tapicería: <strong>$20.00</strong></li>" +
                         "<li>Cargo extra por salir del país sin autorización</li>" +
@@ -552,27 +765,23 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
                 new FormLayout.ResponsiveStep("500px", 2),
                 new FormLayout.ResponsiveStep("800px", 4));
 
-        // Kilometraje de salida
         mileageOutField = new IntegerField("Kilometraje de Salida");
         mileageOutField.setValue(vehicle.getMileage() != null ? vehicle.getMileage() : 0);
         mileageOutField.setMin(0);
         mileageOutField.setReadOnly(isReadOnly);
         form.add(mileageOutField);
 
-        // Nivel de combustible de salida
         fuelLevelOutCombo = new ComboBox<>("Combustible Salida (%)");
         fuelLevelOutCombo.setItems(0, 25, 50, 75, 100);
         fuelLevelOutCombo.setValue(100);
         fuelLevelOutCombo.setReadOnly(isReadOnly);
         form.add(fuelLevelOutCombo);
 
-        // Tipo de combustible
         TextField fuelTypeField = new TextField("Tipo Combustible");
         fuelTypeField.setValue(vehicle.getFuelType() != null ? vehicle.getFuelType().name() : "GASOLINA");
         fuelTypeField.setReadOnly(true);
         form.add(fuelTypeField);
 
-        // Transmisión
         TextField transmissionField = new TextField("Transmisión");
         transmissionField.setValue(vehicle.getTransmissionType() != null ? vehicle.getTransmissionType().name() : "");
         transmissionField.setReadOnly(true);
@@ -583,222 +792,218 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
     }
 
     // ========================================
-    // SECCIÓN: Diagrama de Daños
+    // SECCIÓN: Video del Estado del Vehículo
     // ========================================
 
-    private Div createDamageSection() {
-        Div section = createSection("ESTADO DEL VEHÍCULO - DIAGRAMA DE DAÑOS");
+   private Div createVideoSection() {
+    Div section = createSection("ESTADO DEL VEHÍCULO - VIDEOS (3)");
 
-        Paragraph instruction = new Paragraph(
-                "Haga clic en el diagrama para marcar los daños existentes del vehículo.");
-        instruction.getStyle().set("color", "var(--lumo-secondary-text-color)");
-        section.add(instruction);
+    Paragraph instruction = new Paragraph(
+            "Grabe 3 videos mostrando el estado del vehículo. " +
+            "Los videos sirven como evidencia del estado al momento de la entrega.");
+    instruction.getStyle().set("color", "var(--lumo-secondary-text-color)");
+    section.add(instruction);
 
-        // Leyenda de tipos de daño
-        Div legend = createDamageLegend();
-        section.add(legend);
+    // Info box con instrucciones
+    Div infoBox = new Div();
+    infoBox.getStyle()
+            .set("background", "linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%)")
+            .set("border", "1px solid #64B5F6")
+            .set("border-radius", "var(--lumo-border-radius-m)")
+            .set("padding", "var(--lumo-space-m)")
+            .set("margin-bottom", "var(--lumo-space-m)");
+    
+    infoBox.add(new Html(
+            "<div style='font-size: var(--lumo-font-size-s);'>" +
+            "<strong>🎥 Instrucciones para grabar los videos:</strong>" +
+            "<ul style='margin: var(--lumo-space-xs) 0; padding-left: var(--lumo-space-l);'>" +
+            "<li><strong>Video Exterior:</strong> Todos los lados del vehículo (frente, lados, trasera, techo)</li>" +
+            "<li><strong>Video Interior:</strong> Asientos, tablero, piso, consola, techo interior</li>" +
+            "<li><strong>Otros Detalles:</strong> Motor, cajuela, daños específicos, accesorios</li>" +
+            "<li>Formatos aceptados: MP4, MOV, WebM</li>" +
+            "<li>💡 Grabe desde su celular directamente para mejor calidad - SIN límite de tamaño</li>" +
+            "</ul></div>"));
+    section.add(infoBox);
 
-        // Diagrama
-        var vehicle = contract.getRental().getVehicle();
-        var vehicleType = vehicle.getVehicleType();
+    if (isReadOnly) {
+        // Modo lectura: mostrar los 3 videos si existen
+        section.add(createVideoReadOnlySection("🚗 Video Exterior", 
+                contract.getVehicleExteriorVideoUrl()));
+        section.add(createVideoReadOnlySection("🪑 Video Interior", 
+                contract.getVehicleInteriorVideoUrl()));
+        section.add(createVideoReadOnlySection("🔧 Otros Detalles", 
+                contract.getVehicleDetailsVideoUrl()));
+    } else {
+        // Modo edición: permitir subir 3 videos
+        Div videosGrid = new Div();
+        videosGrid.getStyle()
+                .set("display", "grid")
+                .set("grid-template-columns", "repeat(auto-fit, minmax(280px, 1fr))")
+                .set("gap", "var(--lumo-space-m)")
+                .set("margin-top", "var(--lumo-space-m)");
 
-        if (vehicleType == null) {
-            vehicleType = com.rentacaresv.vehicle.domain.VehicleType.SEDAN;
-        }
+        videosGrid.add(
+                createVideoUploadSection("🚗 Video Exterior", "exterior", 
+                        "Grabe todos los lados del vehículo"),
+                createVideoUploadSection("🪑 Video Interior", "interior", 
+                        "Grabe el interior completo"),
+                createVideoUploadSection("🔧 Otros Detalles", "details", 
+                        "Grabe motor, cajuela, daños específicos")
+        );
 
-        Optional<VehicleDiagram> diagramOpt = contractService.getDiagramForVehicleType(vehicleType);
+        section.add(videosGrid);
 
-        Div diagramContainer = new Div();
-        diagramContainer.addClassName("damage-diagram-container");
-        diagramContainer.setId("damage-diagram");
-        diagramContainer.getStyle()
-                .set("position", "relative")
-                .set("width", "100%")
-                .set("max-width", "800px")
-                .set("margin", "0 auto")
+        // Nota importante
+        Div noteBox = new Div();
+        noteBox.getStyle()
                 .set("background", "var(--lumo-contrast-5pct)")
+                .set("padding", "var(--lumo-space-s)")
                 .set("border-radius", "var(--lumo-border-radius-m)")
-                .set("min-height", "300px");
+                .set("margin-top", "var(--lumo-space-m)")
+                .set("font-size", "var(--lumo-font-size-s)");
+        noteBox.add(new Html(
+                "<div><strong>⚠️ Importante:</strong> Los videos son evidencia oficial del estado del vehículo. " +
+                "Asegúrese de grabar claramente cualquier daño preexistente en cada área.</div>"));
+        section.add(noteBox);
+    }
 
-        if (diagramOpt.isPresent()) {
-            VehicleDiagram diagram = diagramOpt.get();
-            String diagramUrl = diagram.getDiagramUrl();
+    return section;
+}
 
-            if (diagramUrl != null && !diagramUrl.isEmpty()) {
-                // Usar imagen
-                Image diagramImg = new Image(diagramUrl, "Diagrama del vehículo");
-                diagramImg.setWidthFull();
-                diagramImg.getStyle()
-                        .set("display", "block")
-                        .set("max-width", "100%")
-                        .set("height", "auto");
-                diagramContainer.add(diagramImg);
-            } else if (diagram.getSvgContent() != null && !diagram.getSvgContent().isEmpty()) {
-                // Fallback a SVG inline
-                Html svg = new Html("<div class='svg-wrapper'>" + diagram.getSvgContent() + "</div>");
-                diagramContainer.add(svg);
-            } else {
-                diagramContainer.add(new Paragraph("Imagen de diagrama no configurada para este tipo de vehículo"));
+private VerticalLayout createVideoReadOnlySection(String title, String videoUrl) {
+    VerticalLayout layout = new VerticalLayout();
+    layout.setPadding(false);
+    layout.setSpacing(true);
+
+    H4 videoTitle = new H4(title);
+    videoTitle.getStyle().set("margin", "var(--lumo-space-s) 0");
+    layout.add(videoTitle);
+
+    if (videoUrl != null && !videoUrl.isEmpty()) {
+        Div videoContainer = new Div();
+        videoContainer.getStyle()
+                .set("text-align", "center")
+                .set("margin", "var(--lumo-space-m) 0");
+
+        Html video = new Html(
+                "<video controls style='max-width: 100%; max-height: 300px; border-radius: 8px;'>" +
+                "<source src='" + videoUrl + "' type='video/mp4'>" +
+                "Su navegador no soporta el elemento de video." +
+                "</video>");
+        videoContainer.add(video);
+
+        Anchor downloadLink = new Anchor(videoUrl, "⬇️ Descargar");
+        downloadLink.getElement().setAttribute("download", "");
+        downloadLink.getElement().setAttribute("target", "_blank");
+        downloadLink.getStyle()
+                .set("display", "inline-block")
+                .set("margin-top", "var(--lumo-space-s)");
+
+        layout.add(videoContainer, downloadLink);
+    } else {
+        Paragraph noVideo = new Paragraph("No se subió este video");
+        noVideo.getStyle().set("color", "var(--lumo-secondary-text-color)");
+        layout.add(noVideo);
+    }
+
+    return layout;
+}
+
+private VerticalLayout createVideoUploadSection(String title, String videoType, String hint) {
+    VerticalLayout layout = new VerticalLayout();
+    layout.setPadding(true);
+    layout.setSpacing(true);
+    layout.getStyle()
+            .set("border", "2px dashed var(--lumo-contrast-30pct)")
+            .set("border-radius", "var(--lumo-border-radius-m)")
+            .set("background", "var(--lumo-contrast-5pct)");
+
+    H4 videoTitle = new H4(title);
+    videoTitle.getStyle().set("margin", "0 0 var(--lumo-space-s) 0");
+
+    Paragraph hintText = new Paragraph(hint);
+    hintText.getStyle()
+            .set("font-size", "var(--lumo-font-size-s)")
+            .set("color", "var(--lumo-secondary-text-color)")
+            .set("margin", "0 0 var(--lumo-space-m) 0");
+
+    // Preview container
+    Div previewContainer = new Div();
+    previewContainer.setId("video-preview-" + videoType);
+    previewContainer.getStyle()
+            .set("text-align", "center")
+            .set("margin-bottom", "var(--lumo-space-m)");
+
+    Span placeholderIcon = new Span("🎥");
+    placeholderIcon.getStyle().set("font-size", "2.5em");
+    
+    Paragraph placeholderText = new Paragraph("Selecciona el video");
+    placeholderText.getStyle()
+            .set("font-size", "var(--lumo-font-size-s)")
+            .set("color", "var(--lumo-secondary-text-color)");
+
+    previewContainer.add(placeholderIcon, placeholderText);
+
+    // Upload component
+    MemoryBuffer buffer = new MemoryBuffer();
+    Upload upload = new Upload(buffer);
+    upload.setAcceptedFileTypes("video/mp4", "video/quicktime", "video/webm", "video/x-msvideo");
+    upload.setMaxFiles(1);
+    // SIN LÍMITE - 500MB es suficiente para la mayoría de videos desde celular
+    upload.setMaxFileSize(500 * 1024 * 1024); // 500MB
+
+    Button uploadButton = new Button("Seleccionar", VaadinIcon.UPLOAD.create());
+    uploadButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_PRIMARY);
+    upload.setUploadButton(uploadButton);
+    upload.setDropAllowed(false);
+
+    upload.addSucceededListener(event -> {
+        try {
+            String fileName = event.getFileName();
+            String mimeType = event.getMIMEType();
+            InputStream inputStream = buffer.getInputStream();
+
+            // Subir el video según el tipo
+            contractService.uploadVehicleVideo(token, inputStream, fileName, mimeType, videoType);
+
+            // Actualizar UI
+            previewContainer.removeAll();
+            Span successIcon = new Span("✅");
+            successIcon.getStyle().set("font-size", "2em");
+            Paragraph successText = new Paragraph("Video subido: " + fileName);
+            successText.getStyle()
+                    .set("font-size", "var(--lumo-font-size-s)")
+                    .set("color", "var(--lumo-success-color)");
+            previewContainer.add(successIcon, successText);
+
+            // Marcar como subido
+            switch (videoType) {
+                case "exterior" -> vehicleExteriorVideoUrl = "uploaded";
+                case "interior" -> vehicleInteriorVideoUrl = "uploaded";
+                case "details" -> vehicleDetailsVideoUrl = "uploaded";
             }
 
-            // Agregar listener para marcar daños (solo si no es readonly)
-            if (!isReadOnly) {
-                diagramContainer.getElement().executeJs(
-                        "this.addEventListener('click', (e) => {" +
-                                "  const rect = this.getBoundingClientRect();" +
-                                "  const x = ((e.clientX - rect.left) / rect.width * 100).toFixed(2);" +
-                                "  const y = ((e.clientY - rect.top) / rect.height * 100).toFixed(2);" +
-                                "  $0.$server.addDamageMark(x, y);" +
-                                "});",
-                        getElement());
-            }
-        } else {
-            diagramContainer.add(new Paragraph("Diagrama no disponible para este tipo de vehículo. " +
-                    "Configure uno en Catálogo de Contratos."));
+            Notification.show("✅ " + title + " subido exitosamente", 
+                    3000, Notification.Position.TOP_CENTER)
+                    .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+
+        } catch (Exception e) {
+            log.error("Error subiendo video {}: {}", videoType, e.getMessage(), e);
+            Notification.show("Error al subir " + title + ": " + e.getMessage(), 
+                    5000, Notification.Position.MIDDLE)
+                    .addThemeVariants(NotificationVariant.LUMO_ERROR);
         }
+    });
 
-        section.add(diagramContainer);
+    upload.addFileRejectedListener(event -> {
+        Notification.show(title + " rechazado: " + event.getErrorMessage(), 
+                4000, Notification.Position.MIDDLE)
+                .addThemeVariants(NotificationVariant.LUMO_ERROR);
+    });
 
-        // Lista de daños marcados
-        Div damageList = new Div();
-        damageList.setId("damage-list");
-        damageList.addClassName("damage-list");
-        updateDamageList(damageList);
-        section.add(damageList);
-
-        return section;
-    }
-
-    @ClientCallable
-    public void addDamageMark(String x, String y) {
-        if (isReadOnly)
-            return;
-
-        Dialog dialog = new Dialog();
-        dialog.setHeaderTitle("Agregar Daño");
-
-        ComboBox<DamageType> typeCombo = new ComboBox<>("Tipo de Daño");
-        typeCombo.setItems(DamageType.values());
-        typeCombo.setItemLabelGenerator(DamageType::getLabel);
-        typeCombo.setWidthFull();
-
-        TextArea descArea = new TextArea("Descripción");
-        descArea.setWidthFull();
-
-        Button saveBtn = new Button("Guardar", e -> {
-            if (typeCombo.getValue() == null) {
-                Notification.show("Seleccione un tipo de daño", 2000, Notification.Position.MIDDLE);
-                return;
-            }
-
-            ContractService.ContractDamageMarkDTO mark = new ContractService.ContractDamageMarkDTO();
-            mark.setPositionX(new BigDecimal(x));
-            mark.setPositionY(new BigDecimal(y));
-            mark.setDamageType(typeCombo.getValue());
-            mark.setDescription(descArea.getValue());
-            mark.setSeverity(1);
-
-            damageMarks.add(mark);
-
-            Div damageList = (Div) mainContent.getChildren()
-                    .flatMap(c -> {
-                        if (c instanceof Div div) {
-                            return div.getChildren();
-                        }
-                        return java.util.stream.Stream.empty();
-                    })
-                    .filter(c -> c.getId().orElse("").equals("damage-list"))
-                    .findFirst().orElse(null);
-
-            if (damageList != null) {
-                updateDamageList(damageList);
-            }
-
-            addVisualMarker(x, y, typeCombo.getValue());
-            dialog.close();
-        });
-        saveBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
-        Button cancelBtn = new Button("Cancelar", e -> dialog.close());
-
-        HorizontalLayout btns = new HorizontalLayout(saveBtn, cancelBtn);
-        dialog.add(typeCombo, descArea, btns);
-        dialog.open();
-    }
-
-    private void addVisualMarker(String x, String y, DamageType type) {
-        UI.getCurrent().getPage().executeJs(
-                "const container = document.getElementById('damage-diagram');" +
-                        "const marker = document.createElement('div');" +
-                        "marker.className = 'damage-marker';" +
-                        "marker.style.left = $0 + '%';" +
-                        "marker.style.top = $1 + '%';" +
-                        "marker.style.backgroundColor = $2;" +
-                        "marker.textContent = $3;" +
-                        "marker.title = $4;" +
-                        "container.appendChild(marker);",
-                x, y, type.getColor(), type.getSymbol(), type.getLabel());
-    }
-
-    private void updateDamageList(Div container) {
-        container.removeAll();
-
-        if (damageMarks.isEmpty()) {
-            container.add(new Paragraph("No se han marcado daños."));
-            return;
-        }
-
-        H4 listTitle = new H4("Daños marcados (" + damageMarks.size() + "):");
-        container.add(listTitle);
-
-        for (int i = 0; i < damageMarks.size(); i++) {
-            var mark = damageMarks.get(i);
-            int index = i;
-
-            HorizontalLayout row = new HorizontalLayout();
-            row.setAlignItems(FlexComponent.Alignment.CENTER);
-
-            Span typeSpan = new Span(mark.getDamageType().getLabel());
-            typeSpan.getStyle().set("color", mark.getDamageType().getColor()).set("font-weight", "bold");
-
-            Span descSpan = new Span(mark.getDescription() != null ? mark.getDescription() : "Sin descripción");
-
-            if (!isReadOnly) {
-                Button removeBtn = new Button(VaadinIcon.TRASH.create());
-                removeBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_ERROR,
-                        ButtonVariant.LUMO_TERTIARY);
-                removeBtn.addClickListener(e -> {
-                    damageMarks.remove(index);
-                    updateDamageList(container);
-                });
-                row.add(typeSpan, descSpan, removeBtn);
-            } else {
-                row.add(typeSpan, descSpan);
-            }
-
-            container.add(row);
-        }
-    }
-
-    private Div createDamageLegend() {
-        Div legend = new Div();
-        legend.addClassName("damage-legend");
-
-        for (DamageType type : DamageType.values()) {
-            Span item = new Span();
-            item.addClassName("legend-item");
-
-            Span color = new Span(type.getSymbol());
-            color.addClassName("legend-color");
-            color.getStyle().set("background-color", type.getColor());
-
-            Span label = new Span(type.getLabel());
-            item.add(color, label);
-            legend.add(item);
-        }
-
-        return legend;
-    }
+    layout.add(videoTitle, hintText, previewContainer, upload);
+    return layout;
+}
 
     // ========================================
     // SECCIÓN: Términos y Condiciones
@@ -807,28 +1012,32 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
     private Div createTermsSection() {
         Div section = createSection("TÉRMINOS Y CONDICIONES");
 
+        var vehicle = contract.getRental().getVehicle();
+        Integer theftPercentage = vehicle.getTheftDeductiblePercentage();
+
         Div terms = new Div();
         terms.addClassName("contract-terms");
         terms.add(new Html(
                 "<div style='font-size: var(--lumo-font-size-s);'>" +
-                        "<ul>" +
+                        "<ol>" +
                         "<li>El arrendatario se compromete a devolver el vehículo en las mismas condiciones en que lo recibió.</li>"
                         +
-                        "<li>Entregar lavado el vehículo, de lo contrario se cobrará extra $5.00</li>" +
-                        "<li>Manchas o derrame de líquido en tapicería: $20.00</li>" +
+                        "<li>Entregar lavado el vehículo, de lo contrario se cobrará entre <strong>$5 a $15</strong> dependiendo de cómo se entregue de sucio.</li>"
+                        +
+                        "<li>Manchas o derrame de líquido en tapicería: <strong>$20.00</strong></li>" +
                         "<li>El arrendatario es responsable de cualquier daño o pérdida del vehículo durante el período de renta.</li>"
                         +
                         "<li>En caso de accidente, el arrendatario participará con el deducible establecido en este contrato.</li>"
                         +
-                        "<li>En caso de robo, el arrendatario participará con el deducible por robo establecido.</li>" +
+                        "<li>En caso de robo, el arrendatario participará con el <strong>" + theftPercentage
+                        + "%</strong> del valor del vehículo como deducible.</li>" +
                         "<li>El vehículo no puede salir del país sin autorización previa por escrito.</li>" +
                         "<li>Está prohibido fumar dentro del vehículo.</li>" +
-                        "</ul>" +
+                        "</ol>" +
                         "</div>"));
 
         section.add(terms);
 
-        // Observaciones
         observationsField = new TextArea("Observaciones");
         observationsField.setWidthFull();
         observationsField.setMinHeight("100px");
@@ -839,7 +1048,7 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
     }
 
     // ========================================
-    // SECCIÓN: Firma
+    // SECCIÓN: Firmas (Cliente y Empleado)
     // ========================================
 
     private Div createSignatureSection() {
@@ -848,28 +1057,43 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         HorizontalLayout signaturesRow = new HorizontalLayout();
         signaturesRow.setWidthFull();
         signaturesRow.setSpacing(true);
+        signaturesRow.getStyle()
+                .set("flex-wrap", "wrap")
+                .set("gap", "var(--lumo-space-m)")
+                .set("justify-content", "space-around");
 
-        // Firma del cliente
+        // ===== FIRMA DEL CLIENTE =====
         VerticalLayout clientSignature = new VerticalLayout();
         clientSignature.setAlignItems(FlexComponent.Alignment.CENTER);
-        clientSignature.setWidth("50%");
+        clientSignature.getStyle().set("flex", "1").set("min-width", "280px");
         clientSignature.setPadding(false);
 
         Paragraph clientLabel = new Paragraph("FIRMA DEL CLIENTE");
         clientLabel.getStyle().set("font-weight", "bold");
 
         if (isReadOnly && contract.getSignatureUrl() != null) {
-            Image signatureImg = new Image(contract.getSignatureUrl(), "Firma");
+            Image signatureImg = new Image(contract.getSignatureUrl(), "Firma Cliente");
             signatureImg.setMaxWidth("300px");
             signatureImg.setMaxHeight("150px");
             clientSignature.add(clientLabel, signatureImg);
+
+            Span clientName = new Span(contract.getRental().getCustomer().getFullName());
+            clientName.getStyle().set("font-size", "var(--lumo-font-size-s)");
+            clientSignature.add(clientName);
         } else if (!isReadOnly) {
+            // Campo de nombre del cliente (solo lectura para alinear con el del empleado)
+            TextField clientNameField = new TextField("Nombre del Cliente");
+            clientNameField.setValue(contract.getRental().getCustomer().getFullName());
+            clientNameField.setReadOnly(true);
+            clientNameField.setWidthFull();
+            clientNameField.setMaxWidth("350px");
+
             Div signatureContainer = new Div();
-            signatureContainer.setId("signature-container");
+            signatureContainer.setId("client-signature-container");
             signatureContainer.addClassName("signature-box");
 
             Html canvas = new Html(
-                    "<canvas id='signature-canvas' width='400' height='150' " +
+                    "<canvas id='client-signature-canvas' width='350' height='150' " +
                             "style='border: 2px solid #ccc; border-radius: 8px; background: white; touch-action: none;'></canvas>");
             signatureContainer.add(canvas);
 
@@ -877,42 +1101,13 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
             clearBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
             clearBtn.addClickListener(e -> {
                 UI.getCurrent().getPage().executeJs(
-                        "const canvas = document.getElementById('signature-canvas');" +
+                        "const canvas = document.getElementById('client-signature-canvas');" +
                                 "const ctx = canvas.getContext('2d');" +
                                 "ctx.clearRect(0, 0, canvas.width, canvas.height);");
-                signatureBase64 = null;
+                clientSignatureBase64 = null;
             });
 
-            // Inicializar canvas
-            UI.getCurrent().getPage().executeJs(
-                    "setTimeout(() => {" +
-                            "  const canvas = document.getElementById('signature-canvas');" +
-                            "  if (!canvas) return;" +
-                            "  const ctx = canvas.getContext('2d');" +
-                            "  let drawing = false;" +
-                            "  ctx.strokeStyle = '#000';" +
-                            "  ctx.lineWidth = 2;" +
-                            "  ctx.lineCap = 'round';" +
-                            "  function getPos(e) {" +
-                            "    const rect = canvas.getBoundingClientRect();" +
-                            "    const clientX = e.touches ? e.touches[0].clientX : e.clientX;" +
-                            "    const clientY = e.touches ? e.touches[0].clientY : e.clientY;" +
-                            "    return { x: clientX - rect.left, y: clientY - rect.top };" +
-                            "  }" +
-                            "  canvas.addEventListener('mousedown', (e) => { drawing = true; ctx.beginPath(); ctx.moveTo(getPos(e).x, getPos(e).y); });"
-                            +
-                            "  canvas.addEventListener('mousemove', (e) => { if (drawing) { ctx.lineTo(getPos(e).x, getPos(e).y); ctx.stroke(); } });"
-                            +
-                            "  canvas.addEventListener('mouseup', () => { drawing = false; });" +
-                            "  canvas.addEventListener('mouseout', () => { drawing = false; });" +
-                            "  canvas.addEventListener('touchstart', (e) => { e.preventDefault(); drawing = true; ctx.beginPath(); ctx.moveTo(getPos(e).x, getPos(e).y); });"
-                            +
-                            "  canvas.addEventListener('touchmove', (e) => { e.preventDefault(); if (drawing) { ctx.lineTo(getPos(e).x, getPos(e).y); ctx.stroke(); } });"
-                            +
-                            "  canvas.addEventListener('touchend', () => { drawing = false; });" +
-                            "}, 500);");
-
-            clientSignature.add(clientLabel, signatureContainer, clearBtn);
+            clientSignature.add(clientLabel, clientNameField, signatureContainer, clearBtn);
         } else {
             Div placeholder = new Div();
             placeholder.getStyle()
@@ -922,28 +1117,97 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
             clientSignature.add(clientLabel, placeholder);
         }
 
-        // Firma del empleado (placeholder)
+        // ===== FIRMA DEL EMPLEADO =====
         VerticalLayout employeeSignature = new VerticalLayout();
         employeeSignature.setAlignItems(FlexComponent.Alignment.CENTER);
-        employeeSignature.setWidth("50%");
+        employeeSignature.getStyle().set("flex", "1").set("min-width", "280px");
         employeeSignature.setPadding(false);
 
         Paragraph employeeLabel = new Paragraph("FIRMA DEL EMPLEADO");
         employeeLabel.getStyle().set("font-weight", "bold");
 
-        Div employeePlaceholder = new Div();
-        employeePlaceholder.getStyle()
-                .set("width", "300px")
-                .set("height", "100px")
-                .set("border-bottom", "2px solid black");
+        if (isReadOnly && contract.getEmployeeSignatureUrl() != null) {
+            Image employeeSigImg = new Image(contract.getEmployeeSignatureUrl(), "Firma Empleado");
+            employeeSigImg.setMaxWidth("300px");
+            employeeSigImg.setMaxHeight("150px");
+            employeeSignature.add(employeeLabel, employeeSigImg);
 
-        employeeSignature.add(employeeLabel, employeePlaceholder);
+            if (contract.getEmployeeName() != null) {
+                Span empName = new Span(contract.getEmployeeName());
+                empName.getStyle().set("font-size", "var(--lumo-font-size-s)");
+                employeeSignature.add(empName);
+            }
+        } else if (!isReadOnly) {
+            employeeNameField = new TextField("Nombre del Empleado");
+            employeeNameField.setWidthFull();
+            employeeNameField.setMaxWidth("350px");
+            employeeNameField.setPlaceholder("Nombre completo del empleado que entrega");
+            employeeNameField.setRequired(true);
+
+            Div signatureContainer = new Div();
+            signatureContainer.setId("employee-signature-container");
+            signatureContainer.addClassName("signature-box");
+
+            Html canvas = new Html(
+                    "<canvas id='employee-signature-canvas' width='350' height='150' " +
+                            "style='border: 2px solid #ccc; border-radius: 8px; background: white; touch-action: none;'></canvas>");
+            signatureContainer.add(canvas);
+
+            Button clearBtn = new Button("Limpiar", VaadinIcon.ERASER.create());
+            clearBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
+            clearBtn.addClickListener(e -> {
+                UI.getCurrent().getPage().executeJs(
+                        "const canvas = document.getElementById('employee-signature-canvas');" +
+                                "const ctx = canvas.getContext('2d');" +
+                                "ctx.clearRect(0, 0, canvas.width, canvas.height);");
+                employeeSignatureBase64 = null;
+            });
+
+            employeeSignature.add(employeeLabel, employeeNameField, signatureContainer, clearBtn);
+        } else {
+            Div placeholder = new Div();
+            placeholder.getStyle()
+                    .set("width", "300px")
+                    .set("height", "100px")
+                    .set("border-bottom", "2px solid black");
+            employeeSignature.add(employeeLabel, placeholder);
+        }
 
         signaturesRow.add(clientSignature, employeeSignature);
         section.add(signaturesRow);
 
-        // Checkbox de aceptación y botón de firma (solo si no está firmado)
+        // Inicializar ambos canvas
         if (!isReadOnly) {
+            UI.getCurrent().getPage().executeJs(
+                    "setTimeout(() => {" +
+                            "  ['client-signature-canvas', 'employee-signature-canvas'].forEach(canvasId => {" +
+                            "    const canvas = document.getElementById(canvasId);" +
+                            "    if (!canvas) return;" +
+                            "    const ctx = canvas.getContext('2d');" +
+                            "    let drawing = false;" +
+                            "    ctx.strokeStyle = '#000';" +
+                            "    ctx.lineWidth = 2;" +
+                            "    ctx.lineCap = 'round';" +
+                            "    function getPos(e) {" +
+                            "      const rect = canvas.getBoundingClientRect();" +
+                            "      const clientX = e.touches ? e.touches[0].clientX : e.clientX;" +
+                            "      const clientY = e.touches ? e.touches[0].clientY : e.clientY;" +
+                            "      return { x: clientX - rect.left, y: clientY - rect.top };" +
+                            "    }" +
+                            "    canvas.addEventListener('mousedown', (e) => { drawing = true; ctx.beginPath(); ctx.moveTo(getPos(e).x, getPos(e).y); });"
+                            +
+                            "    canvas.addEventListener('mousemove', (e) => { if (drawing) { ctx.lineTo(getPos(e).x, getPos(e).y); ctx.stroke(); } });"
+                            +
+                            "    canvas.addEventListener('mouseup', () => { drawing = false; });" +
+                            "    canvas.addEventListener('mouseout', () => { drawing = false; });" +
+                            "    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); drawing = true; ctx.beginPath(); ctx.moveTo(getPos(e).x, getPos(e).y); });"
+                            +
+                            "    canvas.addEventListener('touchmove', (e) => { e.preventDefault(); if (drawing) { ctx.lineTo(getPos(e).x, getPos(e).y); ctx.stroke(); } });"
+                            +
+                            "    canvas.addEventListener('touchend', () => { drawing = false; });" +
+                            "  });" +
+                            "}, 500);");
+
             Hr separator = new Hr();
             section.add(separator);
 
@@ -958,29 +1222,96 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
                     return;
                 }
 
-                UI.getCurrent().getPage().executeJs(
-                        "return document.getElementById('signature-canvas').toDataURL('image/png');")
-                        .then(String.class, dataUrl -> {
-                            if (dataUrl == null || dataUrl.length() < 1000) {
-                                Notification.show("Por favor, dibuje su firma", 3000, Notification.Position.MIDDLE)
-                                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
-                                return;
-                            }
+                if (employeeNameField.getValue() == null || employeeNameField.getValue().trim().isEmpty()) {
+                    Notification.show("Ingrese el nombre del empleado que entrega", 3000, Notification.Position.MIDDLE)
+                            .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                    employeeNameField.focus();
+                    return;
+                }
 
-                            signatureBase64 = dataUrl;
-                            submitContract();
-                        });
+                // Validar y obtener firmas usando llamadas separadas
+                validateAndSubmitSignatures();
             });
 
             HorizontalLayout signRow = new HorizontalLayout(acceptTerms, signBtn);
             signRow.setWidthFull();
             signRow.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
             signRow.setAlignItems(FlexComponent.Alignment.CENTER);
+            signRow.getStyle().set("flex-wrap", "wrap").set("gap", "var(--lumo-space-m)");
 
             section.add(signRow);
         }
 
         return section;
+    }
+
+    // ========================================
+    // Validación de firmas
+    // ========================================
+
+    private void validateAndSubmitSignatures() {
+        // Primero verificar si el canvas del cliente está vacío
+        UI.getCurrent().getPage().executeJs(
+                "const canvas = document.getElementById('client-signature-canvas');" +
+                "if (!canvas) return 'NO_CANVAS';" +
+                "const ctx = canvas.getContext('2d');" +
+                "const pixelData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;" +
+                "for (let i = 3; i < pixelData.length; i += 4) {" +
+                "  if (pixelData[i] !== 0) return 'HAS_CONTENT';" +
+                "}" +
+                "return 'EMPTY';")
+        .then(String.class, clientStatus -> {
+            if ("EMPTY".equals(clientStatus) || "NO_CANVAS".equals(clientStatus)) {
+                Notification.show("El cliente debe firmar en el área correspondiente", 3000, Notification.Position.MIDDLE)
+                        .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                return;
+            }
+            
+            // Verificar si el canvas del empleado está vacío
+            UI.getCurrent().getPage().executeJs(
+                    "const canvas = document.getElementById('employee-signature-canvas');" +
+                    "if (!canvas) return 'NO_CANVAS';" +
+                    "const ctx = canvas.getContext('2d');" +
+                    "const pixelData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;" +
+                    "for (let i = 3; i < pixelData.length; i += 4) {" +
+                    "  if (pixelData[i] !== 0) return 'HAS_CONTENT';" +
+                    "}" +
+                    "return 'EMPTY';")
+            .then(String.class, employeeStatus -> {
+                if ("EMPTY".equals(employeeStatus) || "NO_CANVAS".equals(employeeStatus)) {
+                    Notification.show("El empleado debe firmar en el área correspondiente", 3000, Notification.Position.MIDDLE)
+                            .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                    return;
+                }
+                
+                // Obtener la firma del cliente
+                UI.getCurrent().getPage().executeJs(
+                        "return document.getElementById('client-signature-canvas')?.toDataURL('image/png') || '';")
+                .then(String.class, clientData -> {
+                    if (clientData == null || clientData.length() < 1000) {
+                        Notification.show("Por favor, el cliente debe dibujar su firma", 3000, Notification.Position.MIDDLE)
+                                .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                        return;
+                    }
+                    clientSignatureBase64 = clientData;
+                    
+                    // Obtener la firma del empleado
+                    UI.getCurrent().getPage().executeJs(
+                            "return document.getElementById('employee-signature-canvas')?.toDataURL('image/png') || '';")
+                    .then(String.class, employeeData -> {
+                        if (employeeData == null || employeeData.length() < 1000) {
+                            Notification.show("Por favor, el empleado debe dibujar su firma", 3000, Notification.Position.MIDDLE)
+                                    .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                            return;
+                        }
+                        employeeSignatureBase64 = employeeData;
+                        
+                        // Ambas firmas válidas, proceder a firmar
+                        submitContract();
+                    });
+                });
+            });
+        });
     }
 
     // ========================================
@@ -990,12 +1321,15 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
     private Div createSection(String title) {
         Div section = new Div();
         section.addClassName("contract-section");
+        section.setWidthFull();
         section.getStyle()
                 .set("background", "white")
                 .set("border", "1px solid var(--lumo-contrast-20pct)")
                 .set("border-radius", "var(--lumo-border-radius-m)")
                 .set("padding", "var(--lumo-space-m)")
-                .set("margin-bottom", "var(--lumo-space-m)");
+                .set("margin-bottom", "var(--lumo-space-m)")
+                .set("width", "100%")
+                .set("box-sizing", "border-box");
 
         H3 sectionTitle = new H3(title);
         sectionTitle.getStyle()
@@ -1010,15 +1344,11 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
     }
 
     private void populateFormWithContractData() {
-        // Pre-llenar con datos guardados en el contrato (si existen)
         if (contract.getAddressElSalvador() != null) {
             addressElSalvadorField.setValue(contract.getAddressElSalvador());
         }
         if (contract.getAddressForeign() != null) {
             addressForeignField.setValue(contract.getAddressForeign());
-        }
-        if (contract.getPhoneUsa() != null) {
-            phoneUsaField.setValue(contract.getPhoneUsa());
         }
         if (contract.getPhoneFamily() != null) {
             phoneFamilyField.setValue(contract.getPhoneFamily());
@@ -1034,9 +1364,6 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         }
         if (contract.getAccidentDeductible() != null) {
             accidentDeductibleField.setValue(contract.getAccidentDeductible().toString());
-        }
-        if (contract.getTheftDeductible() != null) {
-            theftDeductibleField.setValue(contract.getTheftDeductible().toString());
         }
         if (contract.getAdditionalDriverName() != null) {
             additionalDriverField.setValue(contract.getAdditionalDriverName());
@@ -1063,41 +1390,41 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
             documentNumberField.setValue(contract.getDocumentNumber());
         }
 
-        // Cargar daños existentes
-        if (contract.getDamageMarks() != null && !contract.getDamageMarks().isEmpty()) {
-            for (ContractDamageMark mark : contract.getDamageMarks()) {
-                ContractService.ContractDamageMarkDTO dto = new ContractService.ContractDamageMarkDTO();
-                dto.setPositionX(mark.getPositionX());
-                dto.setPositionY(mark.getPositionY());
-                dto.setDamageType(mark.getDamageType());
-                dto.setDescription(mark.getDescription());
-                dto.setSeverity(mark.getSeverity());
-                damageMarks.add(dto);
-            }
+        // Cargar URL del video si existe
+        if (contract.getVehicleExteriorVideoUrl() != null) {
+            vehicleExteriorVideoUrl = contract.getVehicleExteriorVideoUrl();
+        }
+        if (contract.getVehicleInteriorVideoUrl() != null) {
+            vehicleInteriorVideoUrl = contract.getVehicleInteriorVideoUrl();
+        }
+        if (contract.getVehicleDetailsVideoUrl() != null) {
+            vehicleDetailsVideoUrl = contract.getVehicleDetailsVideoUrl();
         }
     }
 
     private void submitContract() {
         try {
-            // Mostrar loading
             Dialog loadingDialog = new Dialog();
             loadingDialog.setCloseOnEsc(false);
             loadingDialog.setCloseOnOutsideClick(false);
             loadingDialog.add(new Paragraph("Procesando contrato..."));
             loadingDialog.open();
 
-            // Guardar todos los datos del formulario
             saveFormData();
 
-            // Firmar
             String ipAddress = VaadinRequest.getCurrent().getRemoteAddr();
             String userAgent = VaadinRequest.getCurrent().getHeader("User-Agent");
 
-            contractService.signContract(token, signatureBase64, ipAddress, userAgent);
+            contractService.signContractWithEmployeeSignature(
+                    token,
+                    clientSignatureBase64,
+                    employeeSignatureBase64,
+                    employeeNameField.getValue().trim(),
+                    ipAddress,
+                    userAgent);
 
             loadingDialog.close();
 
-            // Mostrar éxito
             showSuccess();
 
         } catch (Exception e) {
@@ -1108,41 +1435,39 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
     }
 
     private void saveFormData() {
-        // Actualizar documento
-        contractService.updateDocumentInfo(token,
+        contractService.updateDocumentInfoWithPhotos(token,
                 documentTypeCombo.getValue(),
                 documentNumberField.getValue(),
-                null, null); // No subimos fotos en esta versión simplificada
+                documentFrontBase64,
+                documentBackBase64,
+                licenseFrontBase64,
+                licenseBackBase64);
 
-        // Actualizar info del vehículo
         contractService.updateVehicleInfo(token,
                 mileageOutField.getValue(),
                 fuelLevelOutCombo.getValue());
 
-        // Actualizar accesorios
         List<ContractService.ContractAccessoryDTO> accessoryDTOs = new ArrayList<>();
         for (var entry : accessoryCheckboxes.entrySet()) {
             ContractService.ContractAccessoryDTO dto = new ContractService.ContractAccessoryDTO();
-            dto.setId(entry.getKey());
+            dto.setCatalogId(entry.getKey());
             dto.setIsPresent(entry.getValue().getValue());
             accessoryDTOs.add(dto);
         }
         contractService.updateAccessories(token, accessoryDTOs);
 
-        // Actualizar daños
-        contractService.updateDamageMarks(token, damageMarks);
+        // El video ya se sube directamente en el upload, no necesita guardarse aquí
 
-        // Actualizar campos adicionales
         contractService.updateAdditionalInfo(token,
                 deliveryLocationField.getValue(),
                 addressElSalvadorField.getValue(),
                 addressForeignField.getValue(),
-                phoneUsaField.getValue(),
+                null,
                 phoneFamilyField.getValue(),
                 paymentMethodCombo.getValue(),
                 parseDecimal(depositField.getValue()),
                 parseDecimal(accidentDeductibleField.getValue()),
-                parseDecimal(theftDeductibleField.getValue()),
+                null,
                 additionalDriverField.getValue(),
                 additionalDriverLicenseField.getValue(),
                 additionalDriverDuiField.getValue(),
@@ -1153,7 +1478,7 @@ public class PublicContractView extends VerticalLayout implements BeforeEnterObs
         if (value == null || value.isEmpty())
             return null;
         try {
-            return new BigDecimal(value.replace(",", ""));
+            return new BigDecimal(value.replace(",", "").replace("$", "").trim());
         } catch (NumberFormatException e) {
             return null;
         }

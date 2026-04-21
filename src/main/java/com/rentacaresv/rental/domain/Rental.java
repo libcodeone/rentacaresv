@@ -93,6 +93,13 @@ public class Rental {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
+    /**
+     * Origen de la reserva: ADMIN (creada desde el panel) o WEB (reserva pública)
+     */
+    @Column(name = "source", nullable = false, length = 20)
+    @Builder.Default
+    private String source = "ADMIN";
+
     // ========================================
     // Información de viaje (opcional)
     // ========================================
@@ -127,6 +134,35 @@ public class Rental {
      */
     @Column(name = "google_calendar_event_id", length = 255)
     private String googleCalendarEventId;
+
+    // ========================================
+    // Salida del país
+    // ========================================
+
+    /**
+     * Indica si el cliente tiene autorización para sacar el vehículo fuera del país
+     */
+    @Column(name = "sacar_pais", nullable = false)
+    @Builder.Default
+    private Boolean sacarPais = false;
+
+    /**
+     * Países de Centroamérica a los que se llevará el vehículo (separados por coma)
+     */
+    @Column(name = "destinos_fuera_pais", length = 300)
+    private String destinosFueraPais;
+
+    /**
+     * Cantidad de días que el vehículo estará fuera del país
+     */
+    @Column(name = "dias_fuera_pais")
+    private Integer diasFueraPais;
+
+    /**
+     * Cargo adicional por salida del país (tarifa/día × días fuera del país)
+     */
+    @Column(name = "cargo_sacar_pais", precision = 10, scale = 2)
+    private java.math.BigDecimal cargoSacarPais;
 
     // ========================================
     // Auditoría

@@ -149,6 +149,25 @@ public class Settings implements Serializable {
     @Column(name = "google_client_secret", length = 500)
     private String googleClientSecret;
 
+    /**
+     * ID del usuario cuyo token de Google Calendar es el "calendario de la empresa".
+     * Cuando un admin vincula su cuenta, se guarda aquí para que todos los usuarios
+     * vean ese calendario sin necesidad de vincular sus propias cuentas.
+     */
+    @Column(name = "company_calendar_user_id")
+    private Long companyCalendarUserId;
+
+    // ========================================
+    // Tarifas especiales de renta
+    // ========================================
+
+    /**
+     * Tarifa diaria adicional cuando el cliente saca el vehículo fuera del país.
+     * Se suma al precio base por cada día fuera del país declarado.
+     */
+    @Column(name = "tarifa_sacar_pais", precision = 10, scale = 2)
+    private java.math.BigDecimal tarifaSacarPais;
+
     // ========================================
     // Auditoría
     // ========================================
@@ -177,6 +196,14 @@ public class Settings implements Serializable {
      */
     public void setTenantId(String tenantId) {
         this.tenantId = tenantId;
+    }
+
+    public java.math.BigDecimal getTarifaSacarPais() {
+        return this.tarifaSacarPais;
+    }
+
+    public void setTarifaSacarPais(java.math.BigDecimal tarifaSacarPais) {
+        this.tarifaSacarPais = tarifaSacarPais;
     }
 
     // ========================================
@@ -412,6 +439,21 @@ public class Settings implements Serializable {
         return Boolean.TRUE.equals(googleCalendarEnabled) &&
                googleClientId != null && !googleClientId.isEmpty() &&
                googleClientSecret != null && !googleClientSecret.isEmpty();
+    }
+
+    public Long getCompanyCalendarUserId() {
+        return companyCalendarUserId;
+    }
+
+    public void setCompanyCalendarUserId(Long companyCalendarUserId) {
+        this.companyCalendarUserId = companyCalendarUserId;
+    }
+
+    /**
+     * Verifica si hay un calendario de empresa configurado
+     */
+    public boolean hasCompanyCalendar() {
+        return companyCalendarUserId != null;
     }
 
     public Settings(Long id, String tenantId, String companyName, String logoUrl, Boolean foldersInitialized,

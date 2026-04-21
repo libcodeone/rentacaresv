@@ -1,6 +1,7 @@
 package com.rentacaresv.calendar.ui;
 
 import com.rentacaresv.calendar.application.CalendarEventDTO;
+import com.rentacaresv.calendar.application.GoogleCalendarEventDTO;
 import com.rentacaresv.calendar.application.GoogleCalendarService;
 import com.rentacaresv.calendar.domain.GoogleCalendarToken;
 import com.rentacaresv.components.calendar.CustomCalendar;
@@ -28,6 +29,9 @@ import jakarta.annotation.security.PermitAll;
 import lombok.extern.slf4j.Slf4j;
 import org.vaadin.lineawesome.LineAwesomeIconUrl;
 
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -189,19 +193,22 @@ public class CalendarView extends VerticalLayout implements HasUrlParameter<Stri
         statusLayout.add(titleSpan, googleCalendarStatus);
         leftSide.add(googleIcon, statusLayout);
 
-        // Lado derecho: Botones
+        // Lado derecho: Botones (solo visibles para admins)
         HorizontalLayout rightSide = new HorizontalLayout();
         rightSide.setSpacing(true);
 
-        linkGoogleButton = new Button("Vincular Google Calendar", VaadinIcon.LINK.create());
-        linkGoogleButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        linkGoogleButton.addClickListener(e -> linkGoogleCalendar());
+        // Solo los administradores pueden vincular/desvincular el calendario de empresa
+        if (currentUser.isAdmin()) {
+            linkGoogleButton = new Button("Vincular Calendario Empresa", VaadinIcon.LINK.create());
+            linkGoogleButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+            linkGoogleButton.addClickListener(e -> linkGoogleCalendar());
 
-        unlinkGoogleButton = new Button("Desvincular", VaadinIcon.UNLINK.create());
-        unlinkGoogleButton.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
-        unlinkGoogleButton.addClickListener(e -> confirmUnlinkGoogle());
+            unlinkGoogleButton = new Button("Desvincular", VaadinIcon.UNLINK.create());
+            unlinkGoogleButton.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
+            unlinkGoogleButton.addClickListener(e -> confirmUnlinkGoogle());
 
-        rightSide.add(linkGoogleButton, unlinkGoogleButton);
+            rightSide.add(linkGoogleButton, unlinkGoogleButton);
+        }
 
         content.add(leftSide, rightSide);
         panel.add(content);
@@ -213,40 +220,55 @@ public class CalendarView extends VerticalLayout implements HasUrlParameter<Stri
     }
 
     private void updateGoogleCalendarStatus() {
+        boolean isAdmin = currentUser.isAdmin();
+        
         if (!googleCalendarService.isConfigured()) {
             googleCalendarStatus.setText("No configurado (contacte al administrador)");
             googleCalendarStatus.getStyle().set("color", "var(--lumo-secondary-text-color)");
-            linkGoogleButton.setEnabled(false);
-            unlinkGoogleButton.setVisible(false);
+            if (isAdmin && linkGoogleButton != null) {
+                linkGoogleButton.setEnabled(false);
+            }
+            if (unlinkGoogleButton != null) {
+                unlinkGoogleButton.setVisible(false);
+            }
             return;
         }
 
-        Optional<GoogleCalendarToken> tokenOpt = googleCalendarService.getUserToken(currentUser.getId());
+        // Verificar primero si hay calendario de empresa
+        if (googleCalendarService.hasCompanyCalendar()) {
+            Optional<GoogleCalendarToken> companyTokenOpt = googleCalendarService.getCompanyCalendarToken();
+            
+            if (companyTokenOpt.isPresent()) {
+                GoogleCalendarToken token = companyTokenOpt.get();
+                String email = token.getGoogleEmail() != null ? token.getGoogleEmail() : "Calendario empresa";
 
-        if (tokenOpt.isPresent()) {
-            GoogleCalendarToken token = tokenOpt.get();
-            String email = token.getGoogleEmail() != null ? token.getGoogleEmail() : "Cuenta vinculada";
+                if (token.getSyncEnabled()) {
+                    googleCalendarStatus.setText("🏢 Calendario Empresa: " + email);
+                    googleCalendarStatus.getStyle().set("color", "var(--lumo-success-color)");
+                } else {
+                    googleCalendarStatus.setText("🏢 Calendario Empresa (pausado): " + email);
+                    googleCalendarStatus.getStyle().set("color", "var(--lumo-warning-color)");
+                }
 
-            if (token.getSyncEnabled()) {
-                googleCalendarStatus.setText("Vinculado: " + email);
-                googleCalendarStatus.getStyle().set("color", "var(--lumo-success-color)");
-            } else {
-                googleCalendarStatus.setText("Vinculado (sincronización pausada): " + email);
-                googleCalendarStatus.getStyle().set("color", "var(--lumo-warning-color)");
+                // Solo admins pueden ver los botones
+                if (isAdmin) {
+                    if (linkGoogleButton != null) linkGoogleButton.setVisible(false);
+                    if (unlinkGoogleButton != null) unlinkGoogleButton.setVisible(true);
+                }
             }
-
-            linkGoogleButton.setVisible(false);
-            unlinkGoogleButton.setVisible(true);
         } else {
-            googleCalendarStatus.setText("No vinculado - Las rentas se sincronizarán automáticamente");
-            googleCalendarStatus.getStyle().set("color", "var(--lumo-secondary-text-color)");
-            linkGoogleButton.setVisible(true);
-            unlinkGoogleButton.setVisible(false);
-        }
-
-        // Refrescar la vista después de vincular/desvincular
-        if (tabSheet != null) {
-            buildView();
+            // No hay calendario de empresa configurado
+            if (isAdmin) {
+                // Admin: puede vincular
+                googleCalendarStatus.setText("Sin calendario de empresa - Vincule una cuenta para todos los usuarios");
+                googleCalendarStatus.getStyle().set("color", "var(--lumo-secondary-text-color)");
+                if (linkGoogleButton != null) linkGoogleButton.setVisible(true);
+                if (unlinkGoogleButton != null) unlinkGoogleButton.setVisible(false);
+            } else {
+                // Usuario normal: mostrar mensaje de espera
+                googleCalendarStatus.setText("Esperando que un administrador vincule el calendario de la empresa");
+                googleCalendarStatus.getStyle().set("color", "var(--lumo-secondary-text-color)");
+            }
         }
     }
 
@@ -332,47 +354,370 @@ public class CalendarView extends VerticalLayout implements HasUrlParameter<Stri
         container.setPadding(false);
         container.setSpacing(false);
 
-        // Verificar si el usuario tiene Google Calendar vinculado
-        Optional<GoogleCalendarToken> tokenOpt = googleCalendarService.getUserToken(currentUser.getId());
+        // Usar el token efectivo (calendario empresa o personal)
+        Optional<GoogleCalendarToken> tokenOpt = googleCalendarService.getEffectiveToken(currentUser.getId());
 
         if (tokenOpt.isEmpty()) {
-            // Mostrar mensaje para vincular Google Calendar
-            VerticalLayout messageLayout = new VerticalLayout();
-            messageLayout.setSizeFull();
-            messageLayout.setAlignItems(FlexComponent.Alignment.CENTER);
-            messageLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.CENTER);
+            // Mostrar mensaje según el rol del usuario
+            container.add(createNotLinkedMessage());
+        } else {
+            // Crear contenido con iframe + fallback
+            container.add(createGoogleCalendarContent(tokenOpt.get()));
+        }
 
-            Div icon = new Div();
-            icon.getStyle()
-                    .set("width", "64px")
-                    .set("height", "64px")
-                    .set("background-image",
-                            "url('https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg')")
-                    .set("background-size", "contain")
-                    .set("background-repeat", "no-repeat")
-                    .set("margin-bottom", "var(--lumo-space-m)");
+        return container;
+    }
 
-            H3 title = new H3("Vincula tu Google Calendar");
+    /**
+     * Crea el mensaje cuando no está vinculado Google Calendar.
+     * Muestra diferente contenido según si el usuario es admin o no.
+     */
+    private VerticalLayout createNotLinkedMessage() {
+        VerticalLayout messageLayout = new VerticalLayout();
+        messageLayout.setSizeFull();
+        messageLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+        messageLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.CENTER);
+
+        Div icon = new Div();
+        icon.getStyle()
+                .set("width", "64px")
+                .set("height", "64px")
+                .set("background-image",
+                        "url('https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg')")
+                .set("background-size", "contain")
+                .set("background-repeat", "no-repeat")
+                .set("margin-bottom", "var(--lumo-space-m)");
+
+        if (currentUser.isAdmin()) {
+            // Admin: puede vincular el calendario de empresa
+            H3 title = new H3("Vincular Calendario de Empresa");
             title.getStyle().set("margin", "var(--lumo-space-s) 0");
 
             Paragraph description = new Paragraph(
-                    "Para ver tu Google Calendar aquí, primero debes vincular tu cuenta de Google.");
+                    "Vincule una cuenta de Google para establecer el calendario de la empresa. " +
+                    "Todos los usuarios verán este calendario automáticamente.");
             description.getStyle().set("color", "var(--lumo-secondary-text-color)");
 
-            Button linkButton = new Button("Vincular Google Calendar", VaadinIcon.LINK.create());
+            Button linkButton = new Button("Vincular Calendario Empresa", VaadinIcon.LINK.create());
             linkButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_LARGE);
             linkButton.addClickListener(e -> linkGoogleCalendar());
 
             messageLayout.add(icon, title, description, linkButton);
-            container.add(messageLayout);
         } else {
-            // Crear iframe con Google Calendar embebido
-            googleCalendarIframe = createGoogleCalendarIframe(tokenOpt.get());
-            container.add(googleCalendarIframe);
-            container.setFlexGrow(1, googleCalendarIframe);
+            // Usuario normal: esperar a que el admin vincule
+            H3 title = new H3("Calendario no disponible");
+            title.getStyle().set("margin", "var(--lumo-space-s) 0");
+
+            Paragraph description = new Paragraph(
+                    "El administrador aún no ha vinculado el calendario de la empresa. " +
+                    "Contacte al administrador para habilitar esta funcionalidad.");
+            description.getStyle().set("color", "var(--lumo-secondary-text-color)");
+
+            messageLayout.add(icon, title, description);
         }
+        
+        return messageLayout;
+    }
+
+    /**
+     * Crea el contenido principal de Google Calendar con iframe y fallback
+     */
+    private VerticalLayout createGoogleCalendarContent(GoogleCalendarToken token) {
+        VerticalLayout content = new VerticalLayout();
+        content.setSizeFull();
+        content.setPadding(true);
+        content.setSpacing(true);
+
+        // Banner informativo sobre el iframe
+        Div infoBanner = createIframeInfoBanner(token);
+        content.add(infoBanner);
+
+        // Tabs para alternar entre iframe y lista de eventos
+        TabSheet viewTabs = new TabSheet();
+        viewTabs.setSizeFull();
+
+        // Tab 1: Vista Iframe (puede fallar con 403)
+        VerticalLayout iframeTab = new VerticalLayout();
+        iframeTab.setSizeFull();
+        iframeTab.setPadding(false);
+        googleCalendarIframe = createGoogleCalendarIframe(token);
+        iframeTab.add(googleCalendarIframe);
+        iframeTab.setFlexGrow(1, googleCalendarIframe);
+        viewTabs.add("📅 Vista Calendario", iframeTab);
+
+        // Tab 2: Vista Lista (fallback usando API)
+        VerticalLayout listTab = createEventListView(token);
+        viewTabs.add("📋 Vista Lista (API)", listTab);
+
+        content.add(viewTabs);
+        content.setFlexGrow(1, viewTabs);
+
+        return content;
+    }
+
+    /**
+     * Banner informativo sobre posibles problemas con el iframe
+     */
+    private Div createIframeInfoBanner(GoogleCalendarToken token) {
+        Div banner = new Div();
+        banner.getStyle()
+                .set("background", "linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%)")
+                .set("border", "1px solid #FFB74D")
+                .set("border-radius", "var(--lumo-border-radius-m)")
+                .set("padding", "var(--lumo-space-m)")
+                .set("margin-bottom", "var(--lumo-space-s)");
+
+        HorizontalLayout bannerContent = new HorizontalLayout();
+        bannerContent.setWidthFull();
+        bannerContent.setAlignItems(FlexComponent.Alignment.CENTER);
+        bannerContent.setSpacing(true);
+
+        // Icono de información
+        Span infoIcon = new Span("💡");
+        infoIcon.getStyle().set("font-size", "1.5em");
+
+        // Texto explicativo
+        VerticalLayout textContent = new VerticalLayout();
+        textContent.setPadding(false);
+        textContent.setSpacing(false);
+
+        Span title = new Span("¿El calendario no carga?");
+        title.getStyle()
+                .set("font-weight", "600")
+                .set("color", "#E65100");
+
+        Div explanation = new Div();
+        explanation.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "#5D4037")
+                .set("line-height", "1.4");
+        
+        String googleEmail = token.getGoogleEmail() != null ? token.getGoogleEmail() : "tu cuenta de Google";
+        explanation.setText(
+            "Si ves un error 403, necesitas iniciar sesión en Google en este navegador con la cuenta: " + googleEmail + 
+            ". Alternativamente, usa la pestaña 'Vista Lista (API)' que funciona sin necesidad de sesión del navegador."
+        );
+
+        textContent.add(title, explanation);
+
+        // Botón para abrir Google en nueva pestaña
+        Button openGoogleBtn = new Button("Abrir Google", VaadinIcon.EXTERNAL_LINK.create());
+        openGoogleBtn.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+        openGoogleBtn.getStyle().set("color", "#E65100");
+        openGoogleBtn.addClickListener(e -> {
+            UI.getCurrent().getPage().open("https://accounts.google.com", "_blank");
+        });
+
+        bannerContent.add(infoIcon, textContent, openGoogleBtn);
+        bannerContent.setFlexGrow(1, textContent);
+
+        banner.add(bannerContent);
+        return banner;
+    }
+
+    /**
+     * Crea la vista de lista de eventos usando la API (fallback)
+     */
+    private VerticalLayout createEventListView(GoogleCalendarToken token) {
+        VerticalLayout container = new VerticalLayout();
+        container.setSizeFull();
+        container.setPadding(true);
+        container.setSpacing(true);
+
+        // Header con controles
+        HorizontalLayout header = new HorizontalLayout();
+        header.setWidthFull();
+        header.setAlignItems(FlexComponent.Alignment.CENTER);
+        header.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+
+        H4 listTitle = new H4("Eventos de Google Calendar");
+        listTitle.getStyle().set("margin", "0");
+
+        Button refreshBtn = new Button("Actualizar", VaadinIcon.REFRESH.create());
+        refreshBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
+
+        header.add(listTitle, refreshBtn);
+
+        // Contenedor de eventos
+        Div eventsContainer = new Div();
+        eventsContainer.setWidthFull();
+        eventsContainer.getStyle()
+                .set("overflow-y", "auto")
+                .set("max-height", "500px");
+
+        // Cargar eventos
+        Runnable loadEvents = () -> {
+            eventsContainer.removeAll();
+            
+            // Mostrar loading
+            Div loading = new Div();
+            loading.setText("Cargando eventos...");
+            loading.getStyle()
+                    .set("text-align", "center")
+                    .set("padding", "var(--lumo-space-l)")
+                    .set("color", "var(--lumo-secondary-text-color)");
+            eventsContainer.add(loading);
+
+            try {
+                // Obtener eventos del mes actual y siguiente
+                LocalDate startDate = YearMonth.now().atDay(1);
+                LocalDate endDate = startDate.plusMonths(2);
+
+                List<GoogleCalendarEventDTO> events = googleCalendarService.getUserEvents(
+                        currentUser.getId(), startDate, endDate);
+
+                eventsContainer.removeAll();
+
+                if (events.isEmpty()) {
+                    Div noEvents = new Div();
+                    noEvents.setText("No hay eventos en los próximos 2 meses");
+                    noEvents.getStyle()
+                            .set("text-align", "center")
+                            .set("padding", "var(--lumo-space-xl)")
+                            .set("color", "var(--lumo-secondary-text-color)");
+                    eventsContainer.add(noEvents);
+                } else {
+                    for (GoogleCalendarEventDTO event : events) {
+                        eventsContainer.add(createEventCard(event));
+                    }
+                }
+            } catch (Exception e) {
+                eventsContainer.removeAll();
+                Div errorDiv = new Div();
+                errorDiv.setText("Error al cargar eventos: " + e.getMessage());
+                errorDiv.getStyle()
+                        .set("color", "var(--lumo-error-color)")
+                        .set("padding", "var(--lumo-space-m)");
+                eventsContainer.add(errorDiv);
+                log.error("Error cargando eventos de Google Calendar", e);
+            }
+        };
+
+        refreshBtn.addClickListener(e -> loadEvents.run());
+
+        // Cargar eventos inicialmente
+        loadEvents.run();
+
+        // Mensaje de éxito
+        Div successBanner = new Div();
+        successBanner.getStyle()
+                .set("background", "#E8F5E9")
+                .set("border", "1px solid #81C784")
+                .set("border-radius", "var(--lumo-border-radius-m)")
+                .set("padding", "var(--lumo-space-s)")
+                .set("margin-bottom", "var(--lumo-space-m)")
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "#2E7D32");
+        successBanner.setText("✅ Esta vista usa la API de Google Calendar y funciona independientemente de la sesión del navegador.");
+
+        container.add(header, successBanner, eventsContainer);
+        container.setFlexGrow(1, eventsContainer);
 
         return container;
+    }
+
+    /**
+     * Crea una tarjeta visual para un evento de Google Calendar
+     */
+    private Div createEventCard(GoogleCalendarEventDTO event) {
+        Div card = new Div();
+        card.getStyle()
+                .set("background", "var(--lumo-base-color)")
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-left", "4px solid " + event.getColor())
+                .set("border-radius", "var(--lumo-border-radius-m)")
+                .set("padding", "var(--lumo-space-m)")
+                .set("margin-bottom", "var(--lumo-space-s)")
+                .set("cursor", "pointer")
+                .set("transition", "box-shadow 0.2s");
+
+        // Hover effect via click listener to open in Google
+        if (event.getHtmlLink() != null) {
+            card.getElement().addEventListener("click", e -> {
+                UI.getCurrent().getPage().open(event.getHtmlLink(), "_blank");
+            });
+            card.getStyle().set("cursor", "pointer");
+        }
+
+        HorizontalLayout content = new HorizontalLayout();
+        content.setWidthFull();
+        content.setAlignItems(FlexComponent.Alignment.CENTER);
+        content.setSpacing(true);
+
+        // Fecha
+        VerticalLayout dateBox = new VerticalLayout();
+        dateBox.setPadding(false);
+        dateBox.setSpacing(false);
+        dateBox.setAlignItems(FlexComponent.Alignment.CENTER);
+        dateBox.setWidth("60px");
+
+        String dayOfMonth = String.valueOf(event.getStartDate().getDayOfMonth());
+        String monthName = event.getStartDate().getMonth().toString().substring(0, 3);
+
+        Span daySpan = new Span(dayOfMonth);
+        daySpan.getStyle()
+                .set("font-size", "1.5em")
+                .set("font-weight", "bold")
+                .set("color", event.getColor());
+
+        Span monthSpan = new Span(monthName);
+        monthSpan.getStyle()
+                .set("font-size", "var(--lumo-font-size-xs)")
+                .set("color", "var(--lumo-secondary-text-color)")
+                .set("text-transform", "uppercase");
+
+        dateBox.add(daySpan, monthSpan);
+
+        // Detalles del evento
+        VerticalLayout details = new VerticalLayout();
+        details.setPadding(false);
+        details.setSpacing(false);
+
+        Span titleSpan = new Span(event.getTitle());
+        titleSpan.getStyle()
+                .set("font-weight", "500")
+                .set("font-size", "var(--lumo-font-size-m)");
+
+        // Rango de fechas
+        String dateRange;
+        if (event.getStartDate().equals(event.getEndDate()) || 
+            event.getEndDate().equals(event.getStartDate().plusDays(1))) {
+            dateRange = event.getStartDate().toString();
+        } else {
+            dateRange = event.getStartDate() + " → " + event.getEndDate().minusDays(1);
+        }
+
+        Span dateRangeSpan = new Span(dateRange);
+        dateRangeSpan.getStyle()
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("color", "var(--lumo-secondary-text-color)");
+
+        details.add(titleSpan, dateRangeSpan);
+
+        // Descripción (si existe)
+        if (event.getDescription() != null && !event.getDescription().isBlank()) {
+            String shortDesc = event.getDescription().length() > 100 
+                    ? event.getDescription().substring(0, 100) + "..." 
+                    : event.getDescription();
+            Span descSpan = new Span(shortDesc);
+            descSpan.getStyle()
+                    .set("font-size", "var(--lumo-font-size-xs)")
+                    .set("color", "var(--lumo-tertiary-text-color)")
+                    .set("margin-top", "var(--lumo-space-xs)");
+            details.add(descSpan);
+        }
+
+        // Icono de enlace externo
+        Span linkIcon = new Span("↗");
+        linkIcon.getStyle()
+                .set("color", "var(--lumo-secondary-text-color)")
+                .set("font-size", "1.2em");
+
+        content.add(dateBox, details, linkIcon);
+        content.setFlexGrow(1, details);
+
+        card.add(content);
+        return card;
     }
 
     private Div createGoogleCalendarIframe(GoogleCalendarToken token) {

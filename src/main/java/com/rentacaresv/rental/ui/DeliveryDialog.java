@@ -1,20 +1,12 @@
 package com.rentacaresv.rental.ui;
 
-import com.rentacaresv.rental.application.RentalContractPdfGenerator;
 import com.rentacaresv.rental.application.RentalDTO;
-import com.rentacaresv.rental.application.RentalPhotoService;
 import com.rentacaresv.rental.application.RentalService;
-import com.rentacaresv.rental.domain.Rental;
-import com.rentacaresv.rental.domain.photo.RentalPhotoType;
-import com.rentacaresv.shared.storage.StorageInitializer;
-import com.rentacaresv.shared.ui.PhotoUploadPanel;
-import com.rentacaresv.shared.ui.RentalPhotoUploadPanel;
 import com.vaadin.flow.component.ComponentEvent;
 import com.vaadin.flow.component.ComponentEventListener;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
-import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.H4;
@@ -27,41 +19,26 @@ import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextArea;
-import com.vaadin.flow.server.StreamResource;
 import com.vaadin.flow.shared.Registration;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.ByteArrayInputStream;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
 /**
- * Diálogo para entregar vehículo al cliente
+ * Diálogo para entregar vehículo al cliente.
  * - Cambia estado: PENDING → ACTIVE
- * - Sube fotos de entrega
- * - Guarda notas
+ * - Guarda notas de entrega
  */
 @Slf4j
 public class DeliveryDialog extends Dialog {
 
     private final RentalService rentalService;
-    private final RentalPhotoService rentalPhotoService;
-    private final StorageInitializer storageInitializer;
     private final RentalDTO rental;
 
-    private RentalPhotoUploadPanel photoPanel;
     private TextArea notesField;
     private Button confirmButton;
     private Button cancelButton;
 
-    public DeliveryDialog(RentalService rentalService,
-            RentalPhotoService rentalPhotoService,
-            StorageInitializer storageInitializer,
-            RentalDTO rental) {
+    public DeliveryDialog(RentalService rentalService, RentalDTO rental) {
         this.rentalService = rentalService;
-        this.rentalPhotoService = rentalPhotoService;
-        this.storageInitializer = storageInitializer;
         this.rental = rental;
 
         configureDialog();
@@ -73,36 +50,29 @@ public class DeliveryDialog extends Dialog {
         setModal(true);
         setDraggable(false);
         setResizable(false);
-        setWidth("900px");
-        setMaxHeight("90vh");
+        setWidth("550px");
     }
 
     private void createContent() {
-        // Header con icono
+        // Header
         HorizontalLayout titleLayout = new HorizontalLayout();
         titleLayout.setAlignItems(FlexComponent.Alignment.CENTER);
         titleLayout.setSpacing(true);
-        
+
         Icon carIcon = VaadinIcon.CAR.create();
         carIcon.setSize("24px");
         carIcon.getStyle().set("color", "var(--lumo-primary-color)");
-        
+
         H3 title = new H3("Entregar Vehículo");
         title.getStyle().set("margin", "0");
-        
+
         titleLayout.add(carIcon, title);
 
         // Info de la renta
         VerticalLayout infoLayout = createInfoSection();
 
         // Separador
-        Div separator1 = createSeparator();
-
-        // Panel de fotos
-        photoPanel = new RentalPhotoUploadPanel("Fotos de Entrega", true);
-
-        // Separador
-        Div separator2 = createSeparator();
+        Div separator = createSeparator();
 
         // Notas
         HorizontalLayout notesTitleLayout = new HorizontalLayout();
@@ -112,23 +82,19 @@ public class DeliveryDialog extends Dialog {
         H4 notesTitle = new H4("Notas de Entrega");
         notesTitle.getStyle().set("margin", "0");
         notesTitleLayout.add(notesIcon, notesTitle);
-        notesTitleLayout.getStyle().set("margin", "1rem 0 0.5rem 0");
+        notesTitleLayout.getStyle().set("margin", "0 0 0.5rem 0");
 
         notesField = new TextArea();
-        notesField.setPlaceholder(
-                "Ej: Vehículo entregado en perfecto estado, tanque lleno, todos los accesorios incluidos...");
+        notesField.setPlaceholder("Ej: Vehículo entregado en perfecto estado, tanque lleno, todos los accesorios incluidos...");
         notesField.setWidthFull();
         notesField.setMinHeight("100px");
         notesField.setMaxLength(1000);
         notesField.setHelperText("Opcional - Máximo 1000 caracteres");
 
-        // Layout principal
         VerticalLayout content = new VerticalLayout(
                 titleLayout,
                 infoLayout,
-                separator1,
-                photoPanel,
-                separator2,
+                separator,
                 notesTitleLayout,
                 notesField);
         content.setPadding(true);
@@ -146,29 +112,23 @@ public class DeliveryDialog extends Dialog {
                 .set("border-radius", "var(--lumo-border-radius-m)")
                 .set("padding", "1rem");
 
-        // Vehículo
         HorizontalLayout vehicleRow = new HorizontalLayout();
         vehicleRow.setAlignItems(FlexComponent.Alignment.CENTER);
         Span vehicleLabel = new Span("Vehículo:");
-        vehicleLabel.getStyle().set("font-weight", "bold").set("width", "120px");
-        Span vehicleValue = new Span(rental.getVehicleDescription());
-        vehicleRow.add(vehicleLabel, vehicleValue);
+        vehicleLabel.getStyle().set("font-weight", "bold").set("width", "130px");
+        vehicleRow.add(vehicleLabel, new Span(rental.getVehicleDescription()));
 
-        // Cliente
         HorizontalLayout customerRow = new HorizontalLayout();
         customerRow.setAlignItems(FlexComponent.Alignment.CENTER);
         Span customerLabel = new Span("Cliente:");
-        customerLabel.getStyle().set("font-weight", "bold").set("width", "120px");
-        Span customerValue = new Span(rental.getCustomerName());
-        customerRow.add(customerLabel, customerValue);
+        customerLabel.getStyle().set("font-weight", "bold").set("width", "130px");
+        customerRow.add(customerLabel, new Span(rental.getCustomerName()));
 
-        // Fecha entrega
         HorizontalLayout dateRow = new HorizontalLayout();
         dateRow.setAlignItems(FlexComponent.Alignment.CENTER);
         Span dateLabel = new Span("Fecha entrega:");
-        dateLabel.getStyle().set("font-weight", "bold").set("width", "120px");
-        Span dateValue = new Span(rental.getStartDate().toString());
-        dateRow.add(dateLabel, dateValue);
+        dateLabel.getStyle().set("font-weight", "bold").set("width", "130px");
+        dateRow.add(dateLabel, new Span(rental.getStartDate().toString()));
 
         layout.add(vehicleRow, customerRow, dateRow);
         return layout;
@@ -179,12 +139,11 @@ public class DeliveryDialog extends Dialog {
         separator.getStyle()
                 .set("height", "1px")
                 .set("background", "var(--lumo-contrast-10pct)")
-                .set("margin", "1rem 0");
+                .set("margin", "0.5rem 0");
         return separator;
     }
 
     private void createFooter() {
-       
         confirmButton = new Button("Confirmar Entrega", VaadinIcon.CHECK.create());
         confirmButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SUCCESS);
         confirmButton.addClickListener(e -> confirmDelivery());
@@ -192,7 +151,7 @@ public class DeliveryDialog extends Dialog {
         cancelButton = new Button("Cancelar", VaadinIcon.CLOSE.create());
         cancelButton.addClickListener(e -> close());
 
-        HorizontalLayout footer = new HorizontalLayout( confirmButton, cancelButton);
+        HorizontalLayout footer = new HorizontalLayout(confirmButton, cancelButton);
         footer.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
         footer.setWidthFull();
         footer.getStyle().set("padding", "1rem");
@@ -202,48 +161,13 @@ public class DeliveryDialog extends Dialog {
 
     private void confirmDelivery() {
         try {
-            // Inicializar storage si es necesario
-            storageInitializer.initializeIfNeeded();
-
-            // 1. Cambiar estado de renta a ACTIVE
             rentalService.deliverRental(rental.getId(), notesField.getValue());
-
-            // 2. Subir fotos pendientes
-            uploadPendingPhotos();
-
-            // 3. Mostrar éxito y cerrar
             fireEvent(new DeliveryConfirmedEvent(this));
             showSuccessNotification("Vehículo entregado exitosamente");
             close();
-
         } catch (Exception e) {
             log.error("Error al entregar vehículo: {}", e.getMessage(), e);
             showErrorNotification("Error al entregar vehículo: " + e.getMessage());
-        }
-    }
-
-    private void uploadPendingPhotos() {
-        Map<RentalPhotoType, List<PhotoUploadPanel.PendingUpload>> allUploads = photoPanel.getAllPendingUploads();
-
-        for (Map.Entry<RentalPhotoType, List<PhotoUploadPanel.PendingUpload>> entry : allUploads.entrySet()) {
-            RentalPhotoType photoType = entry.getKey();
-            List<PhotoUploadPanel.PendingUpload> uploads = entry.getValue();
-
-            for (PhotoUploadPanel.PendingUpload upload : uploads) {
-                try {
-                    rentalPhotoService.uploadPhoto(
-                            rental.getId(),
-                            upload.getInputStream(),
-                            upload.getFileName(),
-                            upload.getMimeType(),
-                            photoType,
-                            null
-                    );
-                    log.info("Foto de entrega subida: {} - {}", photoType, upload.getFileName());
-                } catch (Exception e) {
-                    log.error("Error subiendo foto de entrega: {}", e.getMessage(), e);
-                }
-            }
         }
     }
 

@@ -9,6 +9,7 @@ import com.rentacaresv.rental.application.RentalDTO;
 import com.rentacaresv.rental.application.RentalPhotoService;
 import com.rentacaresv.rental.application.RentalService;
 import com.rentacaresv.rental.domain.RentalStatus;
+import com.rentacaresv.settings.application.SettingsCache;
 import com.rentacaresv.shared.storage.StorageInitializer;
 import com.rentacaresv.shared.util.FormatUtils;
 import com.rentacaresv.vehicle.application.VehiclePhotoService;
@@ -58,6 +59,7 @@ public class RentalListView extends VerticalLayout {
     private final RentalPhotoService rentalPhotoService;
     private final StorageInitializer storageInitializer;
     private final ContractService contractService;
+    private final SettingsCache settingsCache;
 
     private Grid<RentalDTO> grid;
     private TextField searchField;
@@ -73,7 +75,8 @@ public class RentalListView extends VerticalLayout {
             PaymentService paymentService,
             RentalPhotoService rentalPhotoService,
             StorageInitializer storageInitializer,
-            ContractService contractService) {
+            ContractService contractService,
+            SettingsCache settingsCache) {
 
         this.rentalService = rentalService;
         this.vehicleService = vehicleService;
@@ -83,6 +86,7 @@ public class RentalListView extends VerticalLayout {
         this.rentalPhotoService = rentalPhotoService;
         this.storageInitializer = storageInitializer;
         this.contractService = contractService;
+        this.settingsCache = settingsCache;
 
         setSizeFull();
         setPadding(true);
@@ -184,6 +188,14 @@ public class RentalListView extends VerticalLayout {
         grid = new Grid<>(RentalDTO.class, false);
         grid.setSizeFull();
 
+        // Acciones (PRIMERA - FIJA, no ordenable)
+        grid.addComponentColumn(this::createActionButtons)
+                .setHeader("Acciones")
+                .setWidth("180px")
+                .setFlexGrow(0)
+                .setFrozen(true)
+                .setSortable(false);
+
         // # - Número de contrato (sin prefijo RENT-)
         grid.addColumn(rental -> formatContractNumber(rental.getContractNumber()))
                 .setHeader("#")
@@ -246,13 +258,6 @@ public class RentalListView extends VerticalLayout {
                 .setAutoWidth(true)
                 .setFlexGrow(1)
                 .setSortable(true);
-
-        // Acciones (no ordenable)
-        grid.addComponentColumn(this::createActionButtons)
-                .setHeader("Acciones")
-                .setAutoWidth(true)
-                .setFlexGrow(1)
-                .setSortable(false);
 
         grid.getStyle()
                 .set("border", "1px solid var(--lumo-contrast-10pct)")
@@ -387,8 +392,9 @@ public class RentalListView extends VerticalLayout {
     }
 
     private void openRentalDialog() {
+        java.math.BigDecimal tarifaSacarPais = settingsCache.getSettings().getTarifaSacarPais();
         RentalFormDialog dialog = new RentalFormDialog(
-                rentalService, vehicleService, customerService, vehiclePhotoService);
+                rentalService, vehicleService, customerService, vehiclePhotoService, tarifaSacarPais);
         dialog.addSaveListener(e -> {
             refreshData();
             showSuccessNotification("Renta creada exitosamente");
@@ -417,8 +423,7 @@ public class RentalListView extends VerticalLayout {
     }
 
     private void openDeliveryDialog(RentalDTO rental) {
-        DeliveryDialog dialog = new DeliveryDialog(
-                rentalService, rentalPhotoService, storageInitializer, rental);
+        DeliveryDialog dialog = new DeliveryDialog(rentalService, rental);
         dialog.addDeliveryConfirmedListener(e -> {
             refreshData();
             showSuccessNotification("Vehículo entregado exitosamente");
@@ -427,8 +432,7 @@ public class RentalListView extends VerticalLayout {
     }
 
     private void openReturnDialog(RentalDTO rental) {
-        ReturnDialog dialog = new ReturnDialog(
-                rentalService, rentalPhotoService, storageInitializer, rental);
+        ReturnDialog dialog = new ReturnDialog(rentalService, rental);
         dialog.addReturnConfirmedListener(e -> {
             refreshData();
             showSuccessNotification("Devolución registrada exitosamente");

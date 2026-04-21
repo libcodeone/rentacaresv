@@ -27,7 +27,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@ToString(exclude = {"rental", "accessories", "damageMarks"})
+@ToString(exclude = { "rental", "accessories" })
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class Contract {
 
@@ -75,26 +75,50 @@ public class Contract {
     private String documentNumber;
 
     /**
-     * URL de la foto del documento (frente)
+     * URL de la foto del documento de identidad (frente)
      */
     @Column(name = "document_front_url", length = 500)
     private String documentFrontUrl;
 
     /**
-     * URL de la foto del documento (reverso, opcional)
+     * URL de la foto del documento de identidad (reverso)
      */
     @Column(name = "document_back_url", length = 500)
     private String documentBackUrl;
+
+    /**
+     * URL de la foto de licencia de conducir (frente)
+     */
+    @Column(name = "license_front_url", length = 500)
+    private String licenseFrontUrl;
+
+    /**
+     * URL de la foto de licencia de conducir (reverso)
+     */
+    @Column(name = "license_back_url", length = 500)
+    private String licenseBackUrl;
 
     // ========================================
     // Información de la firma
     // ========================================
 
     /**
-     * URL de la imagen de la firma digital
+     * URL de la imagen de la firma digital del cliente
      */
     @Column(name = "signature_url", length = 500)
     private String signatureUrl;
+
+    /**
+     * URL de la imagen de la firma del empleado que entrega
+     */
+    @Column(name = "employee_signature_url", length = 500)
+    private String employeeSignatureUrl;
+
+    /**
+     * Nombre del empleado que entrega el vehículo
+     */
+    @Column(name = "employee_name", length = 200)
+    private String employeeName;
 
     /**
      * Fecha y hora de la firma
@@ -119,10 +143,38 @@ public class Contract {
     // ========================================
 
     /**
-     * URL del diagrama del vehículo con las marcas de daños
+     * URL del diagrama del vehículo con las marcas de daños (LEGACY - ya no se usa)
      */
     @Column(name = "vehicle_diagram_url", length = 500)
     private String vehicleDiagramUrl;
+
+    /**
+     * URL del video del EXTERIOR del vehículo al momento de la entrega
+     */
+    @Column(name = "vehicle_exterior_video_url", length = 500)
+    private String vehicleExteriorVideoUrl;
+
+    /**
+     * URL del video del INTERIOR del vehículo al momento de la entrega
+     */
+    @Column(name = "vehicle_interior_video_url", length = 500)
+    private String vehicleInteriorVideoUrl;
+
+    /**
+     * URL del video de OTROS DETALLES del vehículo al momento de la entrega
+     */
+    @Column(name = "vehicle_details_video_url", length = 500)
+    private String vehicleDetailsVideoUrl;
+
+    /**
+     * URL del video del estado del vehículo al momento de la devolución
+     */
+    @Column(name = "vehicle_return_video_url", length = 500)
+    private String vehicleReturnVideoUrl;
+
+    // LEGACY - campo antiguo, mantener para compatibilidad
+    @Column(name = "vehicle_video_url", length = 500)
+    private String vehicleVideoUrl;
 
     // ========================================
     // Información del vehículo al momento del contrato
@@ -282,13 +334,6 @@ public class Contract {
     @Builder.Default
     private Set<ContractAccessory> accessories = new HashSet<>();
 
-    /**
-     * Lista de marcas de daños en el vehículo
-     */
-    @OneToMany(mappedBy = "contract", cascade = CascadeType.ALL, orphanRemoval = true)
-    @Builder.Default
-    private Set<ContractDamageMark> damageMarks = new HashSet<>();
-
     // ========================================
     // Auditoría
     // ========================================
@@ -351,8 +396,7 @@ public class Contract {
     public void sign(String signatureUrl, String ipAddress, String userAgent) {
         if (!canBeSigned()) {
             throw new IllegalStateException(
-                "El contrato no puede ser firmado. Estado: " + status + ", Expirado: " + isExpired()
-            );
+                    "El contrato no puede ser firmado. Estado: " + status + ", Expirado: " + isExpired());
         }
 
         this.signatureUrl = signatureUrl;
@@ -369,8 +413,7 @@ public class Contract {
     public void cancel() {
         if (!status.canBeCancelled()) {
             throw new IllegalStateException(
-                "El contrato no puede ser cancelado. Estado actual: " + status
-            );
+                    "El contrato no puede ser cancelado. Estado actual: " + status);
         }
         this.status = ContractStatus.CANCELLED;
         this.updatedAt = LocalDateTime.now();
@@ -392,14 +435,6 @@ public class Contract {
     public void addAccessory(ContractAccessory accessory) {
         accessories.add(accessory);
         accessory.setContract(this);
-    }
-
-    /**
-     * Agrega una marca de daño al contrato
-     */
-    public void addDamageMark(ContractDamageMark damageMark) {
-        damageMarks.add(damageMark);
-        damageMark.setContract(this);
     }
 
     /**

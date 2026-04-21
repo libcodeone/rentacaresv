@@ -148,6 +148,11 @@ public class RentalDetailsDialog extends Dialog {
         if (rental.getIsTouristRental()) {
             layout.add(createTravelSection());
         }
+
+        // Salida del país
+        if (Boolean.TRUE.equals(rental.getSacarPais())) {
+            layout.add(createSacarPaisSection());
+        }
         
         // Notas
         if (rental.getNotes() != null && !rental.getNotes().isBlank()) {
@@ -498,6 +503,54 @@ public class RentalDetailsDialog extends Dialog {
         VerticalLayout wrapper = new VerticalLayout(travelDetails);
         wrapper.setPadding(false);
         
+        return wrapper;
+    }
+
+    private VerticalLayout createSacarPaisSection() {
+        HorizontalLayout titleLayout = new HorizontalLayout();
+        titleLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+        titleLayout.setSpacing(true);
+
+        Icon icon = VaadinIcon.GLOBE.create();
+        icon.setSize("18px");
+        icon.getStyle().set("color", "var(--lumo-primary-color)");
+
+        Span sectionTitle = new Span("Salida del País");
+        sectionTitle.getStyle()
+            .set("font-size", "1.1rem")
+            .set("font-weight", "bold")
+            .set("color", "var(--lumo-primary-color)");
+
+        titleLayout.add(icon, sectionTitle);
+
+        VerticalLayout content = new VerticalLayout();
+        content.setPadding(false);
+        content.setSpacing(true);
+
+        if (rental.getDestinosFueraPais() != null && !rental.getDestinosFueraPais().isBlank()) {
+            content.add(createInfoRowWithIcon(VaadinIcon.MAP_MARKER, "Destinos", rental.getDestinosFueraPais()));
+        }
+        if (rental.getDiasFueraPais() != null && rental.getDiasFueraPais() > 0) {
+            content.add(createInfoRowWithIcon(VaadinIcon.CALENDAR, "Días fuera del país",
+                    rental.getDiasFueraPais() + " día(s)"));
+        }
+        if (rental.getCargoSacarPais() != null && rental.getCargoSacarPais().compareTo(java.math.BigDecimal.ZERO) > 0) {
+            content.add(createInfoRowWithIcon(VaadinIcon.MONEY, "Cargo por salida del país",
+                    FormatUtils.formatPrice(rental.getCargoSacarPais())));
+        }
+
+        Details details = new Details("", content);
+        details.setSummary(titleLayout);
+        details.setOpened(true);
+        details.getStyle()
+            .set("padding", "1rem")
+            .set("background", "var(--lumo-primary-color-10pct)")
+            .set("border", "1px solid var(--lumo-primary-color-50pct)")
+            .set("border-radius", "var(--lumo-border-radius-m)")
+            .set("margin-bottom", "0.5rem");
+
+        VerticalLayout wrapper = new VerticalLayout(details);
+        wrapper.setPadding(false);
         return wrapper;
     }
 

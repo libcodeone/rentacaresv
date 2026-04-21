@@ -19,7 +19,7 @@ import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
-import com.vaadin.flow.component.textfield.EmailField;
+// import com.vaadin.flow.component.textfield.EmailField; // Removido por problemas en Safari
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.binder.BeanValidationBinder;
@@ -42,9 +42,10 @@ public class CustomerFormDialog extends Dialog {
     private TextField fullName;
     private ComboBox<DocumentType> documentType;
     private TextField documentNumber;
-    private EmailField email;
+    private TextField email;
     private TextField phone;
     private TextArea address;
+    private TextArea addressForeign;
     private DatePicker birthDate;
     
     // Licencia de conducir
@@ -60,6 +61,7 @@ public class CustomerFormDialog extends Dialog {
     private Button cancelButton;
     
     private final boolean isEdit;
+    private Long customerId;
 
     public CustomerFormDialog(CustomerService customerService, CustomerDTO customerToEdit) {
         this.customerService = customerService;
@@ -132,20 +134,29 @@ public class CustomerFormDialog extends Dialog {
         driverLicenseExpiry.setHelperText("Informativo - no bloquea rentas");
         
         // Información de contacto
-        email = new EmailField("Email");
+        email = new TextField("Email");
         email.setPlaceholder("cliente@ejemplo.com");
         email.setMaxLength(100);
         email.setClearButtonVisible(true);
+        // Validación de email más permisiva para Safari (acepta números)
+        email.setPattern("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}");
+        email.setErrorMessage("Formato de email inválido");
+        email.setHelperText("Ej: usuario@dominio.com o usuario123@dominio.com");
         
         phone = new TextField("Teléfono");
         phone.setPlaceholder("Ej: 7123-4567");
         phone.setMaxLength(20);
         phone.setClearButtonVisible(true);
         
-        address = new TextArea("Dirección");
-        address.setPlaceholder("Dirección completa del cliente...");
+        address = new TextArea("Dirección en El Salvador (Hospedaje)");
+        address.setPlaceholder("Dirección donde se hospedará en El Salvador...");
         address.setMaxLength(500);
         address.setHelperText("Máximo 500 caracteres");
+
+        addressForeign = new TextArea("Dirección en el Extranjero");
+        addressForeign.setPlaceholder("Dirección en su país de origen...");
+        addressForeign.setMaxLength(500);
+        addressForeign.setHelperText("Máximo 500 caracteres");
         
         // Categoría
         category = new ComboBox<>("Categoría");
@@ -178,6 +189,7 @@ public class CustomerFormDialog extends Dialog {
         
         formLayout.add(email, phone);
         formLayout.add(address, 2);
+        formLayout.add(addressForeign, 2);
         formLayout.add(notes, 2);
         
         // Binding
@@ -192,6 +204,7 @@ public class CustomerFormDialog extends Dialog {
         binder.forField(email).bind("email");
         binder.forField(phone).bind("phone");
         binder.forField(address).bind("address");
+        binder.forField(addressForeign).bind("addressForeign");
         binder.forField(birthDate).bind("birthDate");
         binder.forField(driverLicenseNumber).bind("driverLicenseNumber");
         binder.forField(driverLicenseCountry).bind("driverLicenseCountry");
@@ -231,15 +244,16 @@ public class CustomerFormDialog extends Dialog {
     }
 
     private void populateForm(CustomerDTO customer) {
+        this.customerId = customer.getId();
         fullName.setValue(customer.getFullName());
         
         documentType.setValue(DocumentType.valueOf(customer.getDocumentType()));
         documentNumber.setValue(customer.getDocumentNumber());
-        documentNumber.setReadOnly(true); // No se puede cambiar en edición
         
         if (customer.getEmail() != null) email.setValue(customer.getEmail());
         if (customer.getPhone() != null) phone.setValue(customer.getPhone());
         if (customer.getAddress() != null) address.setValue(customer.getAddress());
+        if (customer.getAddressForeign() != null) addressForeign.setValue(customer.getAddressForeign());
         if (customer.getBirthDate() != null) birthDate.setValue(customer.getBirthDate());
         
         // Licencia de conducir
@@ -261,7 +275,11 @@ public class CustomerFormDialog extends Dialog {
     private void save() {
         try {
             binder.writeBean(command);
-            customerService.createCustomer(command);
+            if (isEdit) {
+                customerService.updateCustomer(customerId, command);
+            } else {
+                customerService.createCustomer(command);
+            }
             fireEvent(new SaveEvent(this));
             close();
         } catch (ValidationException e) {
