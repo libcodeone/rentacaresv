@@ -346,7 +346,7 @@ public class PublicReservationService {
                 notes.append(" | Lic: ").append(dto.getAdditionalDriverLicense());
             }
             if (dto.getAdditionalDriverDui() != null) {
-                notes.append(" | DUI: ").append(dto.getAdditionalDriverDui());
+                notes.append(" | Doc. Identidad: ").append(dto.getAdditionalDriverDui());
             }
             notes.append("\n");
         }
@@ -429,6 +429,7 @@ public class PublicReservationService {
                             <div class="field"><b>Fecha de devolución:</b> %s</div>
                             <div class="field"><b>Días de renta:</b> %d día(s)</div>
                             <div class="field"><b>Tarifa diaria:</b> $%s</div>
+                            %s
                             <div class="field"><b>Total estimado:</b> <strong>$%s</strong></div>
                         </div>
 
@@ -441,7 +442,7 @@ public class PublicReservationService {
                         <div class="steps">
                             <h3>Próximos Pasos</h3>
                             <div class="step"><span class="step-num">1</span><span>Nos pondremos en contacto con usted para coordinar el lugar y hora de entrega.</span></div>
-                            <div class="step"><span class="step-num">2</span><span>Presente su DUI o pasaporte y licencia de conducir originales al momento de la entrega.</span></div>
+                            <div class="step"><span class="step-num">2</span><span>Presente su documento de identidad o pasaporte y licencia de conducir originales al momento de la entrega.</span></div>
                             <div class="step"><span class="step-num">3</span><span>Se realizará una inspección del vehículo y firmará el contrato de arrendamiento en ese momento.</span></div>
                             <div class="step"><span class="step-num">4</span><span>Para cancelar o modificar su reserva, contáctenos con anticipación.</span></div>
                         </div>
@@ -461,6 +462,7 @@ public class PublicReservationService {
                     rental.getEndDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
                     rental.getTotalDays(),
                     rental.getDailyRate(),
+                    buildSacarPaisClientHtml(rental),
                     rental.getTotalAmount(),
                     rental.getContractNumber(),
                     companyName != null ? companyName : "Nova Rentacar"
@@ -595,6 +597,19 @@ public class PublicReservationService {
         }
     }
 
+    private String buildSacarPaisClientHtml(Rental rental) {
+        if (!Boolean.TRUE.equals(rental.getSacarPais())) return "";
+        StringBuilder sb = new StringBuilder();
+        sb.append("<div class=\"field\"><b>Salida del país:</b> Autorizado</div>");
+        if (rental.getDestinosFueraPais() != null && !rental.getDestinosFueraPais().isBlank())
+            sb.append("<div class=\"field\"><b>Destinos:</b> ").append(rental.getDestinosFueraPais()).append("</div>");
+        if (rental.getDiasFueraPais() != null && rental.getDiasFueraPais() > 0)
+            sb.append("<div class=\"field\"><b>Días fuera del país:</b> ").append(rental.getDiasFueraPais()).append(" día(s)</div>");
+        if (rental.getCargoSacarPais() != null && rental.getCargoSacarPais().compareTo(BigDecimal.ZERO) > 0)
+            sb.append("<div class=\"field\"><b>Cargo por salida del país:</b> $").append(rental.getCargoSacarPais()).append("</div>");
+        return sb.toString();
+    }
+
     private String buildOptionalInfoHtml(PublicReservationDTO dto) {
         StringBuilder sb = new StringBuilder();
         boolean hasOptional = false;
@@ -603,7 +618,8 @@ public class PublicReservationService {
             (dto.getAccommodation() != null && !dto.getAccommodation().isBlank()) ||
             (dto.getDeliveryLocation() != null && !dto.getDeliveryLocation().isBlank()) ||
             (dto.getPhoneFamily() != null && !dto.getPhoneFamily().isBlank()) ||
-            (dto.getAdditionalDriverName() != null && !dto.getAdditionalDriverName().isBlank())) {
+            (dto.getAdditionalDriverName() != null && !dto.getAdditionalDriverName().isBlank()) ||
+            dto.isSacarPais()) {
             hasOptional = true;
         }
 
@@ -623,8 +639,15 @@ public class PublicReservationService {
             if (dto.getAdditionalDriverLicense() != null)
                 sb.append(" | Lic: ").append(dto.getAdditionalDriverLicense());
             if (dto.getAdditionalDriverDui() != null)
-                sb.append(" | DUI: ").append(dto.getAdditionalDriverDui());
+                sb.append(" | Doc. Identidad: ").append(dto.getAdditionalDriverDui());
             sb.append("</div>");
+        }
+        if (dto.isSacarPais()) {
+            sb.append("<div class=\"field\"><b>Salida del país:</b> Sí</div>");
+            if (dto.getDestinosFueraPais() != null && !dto.getDestinosFueraPais().isBlank())
+                sb.append("<div class=\"field\"><b>Destinos:</b> ").append(dto.getDestinosFueraPais()).append("</div>");
+            if (dto.getDiasFueraPais() > 0)
+                sb.append("<div class=\"field\"><b>Días fuera del país:</b> ").append(dto.getDiasFueraPais()).append("</div>");
         }
         sb.append("</div>");
 

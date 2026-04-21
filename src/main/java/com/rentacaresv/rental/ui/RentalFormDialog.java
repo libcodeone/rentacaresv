@@ -17,6 +17,7 @@ import com.vaadin.flow.component.combobox.ComboBox;
 
 import com.rentacaresv.shared.ui.ModernDateRangePicker;
 import com.rentacaresv.shared.ui.DateRange;
+import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.details.Details;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
@@ -27,6 +28,7 @@ import com.vaadin.flow.component.html.Image;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
+import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
@@ -82,6 +84,14 @@ public class RentalFormDialog extends Dialog {
     private TextField accommodationField;
     private TextField contactPhoneField;
 
+    // Campos de salida del país (opcionales)
+    private Checkbox sacarPaisCheckbox;
+    private TextField destinosField;
+    private IntegerField diasFueraPaisField;
+
+    // Tarifa de salida del país (leída de Settings)
+    private final BigDecimal tarifaSacarPais;
+
     // Información calculada
     private Span daysLabel;
     private Span priceLabel;
@@ -94,7 +104,7 @@ public class RentalFormDialog extends Dialog {
             RentalService rentalService,
             VehicleService vehicleService,
             CustomerService customerService) {
-        this(rentalService, vehicleService, customerService, null);
+        this(rentalService, vehicleService, customerService, null, null);
     }
 
     public RentalFormDialog(
@@ -102,11 +112,21 @@ public class RentalFormDialog extends Dialog {
             VehicleService vehicleService,
             CustomerService customerService,
             VehiclePhotoService vehiclePhotoService) {
+        this(rentalService, vehicleService, customerService, vehiclePhotoService, null);
+    }
+
+    public RentalFormDialog(
+            RentalService rentalService,
+            VehicleService vehicleService,
+            CustomerService customerService,
+            VehiclePhotoService vehiclePhotoService,
+            BigDecimal tarifaSacarPais) {
 
         this.rentalService = rentalService;
         this.vehicleService = vehicleService;
         this.customerService = customerService;
         this.vehiclePhotoService = vehiclePhotoService;
+        this.tarifaSacarPais = tarifaSacarPais != null ? tarifaSacarPais : BigDecimal.ZERO;
         this.command = new CreateRentalCommand();
         this.binder = new BeanValidationBinder<>(CreateRentalCommand.class);
 
@@ -283,6 +303,63 @@ public class RentalFormDialog extends Dialog {
                 .set("padding", "0.5rem");
 
         // ========================================
+        // Sección colapsable: Salida del País
+        // ========================================
+
+        sacarPaisCheckbox = new Checkbox("Autoriza sacar el vehículo fuera del país");
+        sacarPaisCheckbox.getStyle().set("margin-bottom", "0.5rem");
+
+        destinosField = new TextField("Destinos fuera del país");
+        destinosField.setPlaceholder("Ej: Guatemala, Honduras");
+        destinosField.setMaxLength(300);
+        destinosField.setPrefixComponent(VaadinIcon.GLOBE.create());
+        destinosField.setEnabled(false);
+
+        diasFueraPaisField = new IntegerField("Días fuera del país");
+        diasFueraPaisField.setMin(1);
+        diasFueraPaisField.setMax(365);
+        diasFueraPaisField.setValue(0);
+        diasFueraPaisField.setStepButtonsVisible(true);
+        diasFueraPaisField.setEnabled(false);
+
+        if (tarifaSacarPais.compareTo(BigDecimal.ZERO) > 0) {
+            diasFueraPaisField.setHelperText("Tarifa: $" + tarifaSacarPais + "/día");
+        }
+
+        sacarPaisCheckbox.addValueChangeListener(e -> {
+            boolean checked = Boolean.TRUE.equals(e.getValue());
+            destinosField.setEnabled(checked);
+            diasFueraPaisField.setEnabled(checked);
+            if (!checked) {
+                destinosField.clear();
+                diasFueraPaisField.setValue(0);
+            }
+            calculatePrice();
+        });
+
+        diasFueraPaisField.addValueChangeListener(e -> calculatePrice());
+
+        FormLayout sacarPaisFormLayout = new FormLayout();
+        sacarPaisFormLayout.setResponsiveSteps(
+                new FormLayout.ResponsiveStep("0", 1),
+                new FormLayout.ResponsiveStep("500px", 2));
+        sacarPaisFormLayout.add(sacarPaisCheckbox, 2);
+        sacarPaisFormLayout.add(destinosField, diasFueraPaisField);
+
+        HorizontalLayout sacarPaisHeader = new HorizontalLayout();
+        sacarPaisHeader.setAlignItems(FlexComponent.Alignment.CENTER);
+        Icon globeIcon = VaadinIcon.GLOBE.create();
+        globeIcon.setSize("16px");
+        sacarPaisHeader.add(globeIcon, new Span("Salida del País (Opcional)"));
+
+        Details sacarPaisDetails = new Details(sacarPaisHeader, sacarPaisFormLayout);
+        sacarPaisDetails.setOpened(false);
+        sacarPaisDetails.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-20pct)")
+                .set("border-radius", "var(--lumo-border-radius-m)")
+                .set("padding", "0.5rem");
+
+        // ========================================
         // Binding de campos
         // ========================================
 
@@ -328,6 +405,15 @@ public class RentalFormDialog extends Dialog {
         binder.forField(accommodationField).bind("accommodation");
         binder.forField(contactPhoneField).bind("contactPhone");
 
+        // Binding campos de salida del país
+        binder.forField(sacarPaisCheckbox).bind("sacarPais");
+        binder.forField(destinosField).bind("destinosFueraPais");
+        binder.forField(diasFueraPaisField)
+                .withConverter(
+                        val -> val != null ? val : 0,
+                        val -> val != null ? val : 0)
+                .bind("diasFueraPais");
+
         binder.readBean(command);
 
         // Layout principal
@@ -336,7 +422,8 @@ public class RentalFormDialog extends Dialog {
                 basicFormLayout,
                 vehiclePreviewPanel,
                 infoLayout,
-                travelDetails);
+                travelDetails,
+                sacarPaisDetails);
         content.setPadding(true);
         content.setSpacing(true);
 
@@ -740,6 +827,19 @@ public class RentalFormDialog extends Dialog {
             }
 
             BigDecimal total = dailyRate.multiply(BigDecimal.valueOf(days));
+
+            // Incluir cargo por salida del país en la previsualización
+            BigDecimal cargoPreview = BigDecimal.ZERO;
+            if (sacarPaisCheckbox != null && Boolean.TRUE.equals(sacarPaisCheckbox.getValue())
+                    && diasFueraPaisField != null
+                    && diasFueraPaisField.getValue() != null
+                    && diasFueraPaisField.getValue() > 0
+                    && tarifaSacarPais.compareTo(BigDecimal.ZERO) > 0) {
+                cargoPreview = tarifaSacarPais.multiply(BigDecimal.valueOf(diasFueraPaisField.getValue()));
+                total = total.add(cargoPreview);
+                rateType += " + $" + cargoPreview + " (salida país)";
+            }
+
             priceLabel.setText("Total estimado: " + FormatUtils.formatPrice(total) + rateType);
         } else {
             priceLabel.setText("Total estimado: (selecciona vehículo y cliente)");

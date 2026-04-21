@@ -9,6 +9,7 @@ import com.rentacaresv.rental.application.RentalDTO;
 import com.rentacaresv.rental.application.RentalPhotoService;
 import com.rentacaresv.rental.application.RentalService;
 import com.rentacaresv.rental.domain.RentalStatus;
+import com.rentacaresv.settings.application.SettingsCache;
 import com.rentacaresv.shared.storage.StorageInitializer;
 import com.rentacaresv.shared.util.FormatUtils;
 import com.rentacaresv.vehicle.application.VehiclePhotoService;
@@ -58,6 +59,7 @@ public class RentalListView extends VerticalLayout {
     private final RentalPhotoService rentalPhotoService;
     private final StorageInitializer storageInitializer;
     private final ContractService contractService;
+    private final SettingsCache settingsCache;
 
     private Grid<RentalDTO> grid;
     private TextField searchField;
@@ -73,7 +75,8 @@ public class RentalListView extends VerticalLayout {
             PaymentService paymentService,
             RentalPhotoService rentalPhotoService,
             StorageInitializer storageInitializer,
-            ContractService contractService) {
+            ContractService contractService,
+            SettingsCache settingsCache) {
 
         this.rentalService = rentalService;
         this.vehicleService = vehicleService;
@@ -83,6 +86,7 @@ public class RentalListView extends VerticalLayout {
         this.rentalPhotoService = rentalPhotoService;
         this.storageInitializer = storageInitializer;
         this.contractService = contractService;
+        this.settingsCache = settingsCache;
 
         setSizeFull();
         setPadding(true);
@@ -388,8 +392,9 @@ public class RentalListView extends VerticalLayout {
     }
 
     private void openRentalDialog() {
+        java.math.BigDecimal tarifaSacarPais = settingsCache.getSettings().getTarifaSacarPais();
         RentalFormDialog dialog = new RentalFormDialog(
-                rentalService, vehicleService, customerService, vehiclePhotoService);
+                rentalService, vehicleService, customerService, vehiclePhotoService, tarifaSacarPais);
         dialog.addSaveListener(e -> {
             refreshData();
             showSuccessNotification("Renta creada exitosamente");

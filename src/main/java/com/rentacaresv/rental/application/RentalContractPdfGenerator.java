@@ -475,7 +475,7 @@ public class RentalContractPdfGenerator {
                 .setFontSize(10));
         tenantCell.add(new Paragraph(rental.getCustomer().getFullName())
                 .setFontSize(9));
-        tenantCell.add(new Paragraph("DUI: " + rental.getCustomer().getDocumentNumber())
+        tenantCell.add(new Paragraph("Doc. Identidad: " + rental.getCustomer().getDocumentNumber())
                 .setFontSize(9)
                 .setItalic());
 

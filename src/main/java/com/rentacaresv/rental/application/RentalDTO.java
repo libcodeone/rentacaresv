@@ -56,6 +56,12 @@ public class RentalDTO {
     private String travelItinerary;
     private String accommodation;
     private String contactPhone;
+
+    // Salida del país
+    private Boolean sacarPais;
+    private String destinosFueraPais;
+    private Integer diasFueraPais;
+    private BigDecimal cargoSacarPais;
     
     // Campos calculados
     private Integer actualDays;
