@@ -216,7 +216,7 @@ public class CustomerListView extends VerticalLayout {
 
     private String getDocumentTypeLabel(String type) {
         return switch (type) {
-            case "DUI" -> "DUI";
+            case "DUI" -> "Documento de Identidad";
             case "PASSPORT" -> "Pasaporte";
             case "DRIVERS_LICENSE" -> "Licencia";
             case "OTHER" -> "Otro";

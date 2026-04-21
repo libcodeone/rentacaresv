@@ -187,7 +187,7 @@ public class ContractPdfGenerator {
         addCell(table, "Nombre:", customer.getFullName(), 2);
         String docNumber = contract.getDocumentNumber() != null ? contract.getDocumentNumber() : 
                           (customer.getDocumentNumber() != null ? customer.getDocumentNumber() : "-");
-        addCell(table, "DUI:", docNumber, 1);
+        addCell(table, "Doc. Identidad:", docNumber, 1);
         addCell(table, "Licencia:", customer.getDriverLicenseNumber() != null ? customer.getDriverLicenseNumber() : "-", 1);
 
         // Fila 2: Dirección SV (2 cols), Tel, Tel USA
@@ -251,7 +251,7 @@ public class ContractPdfGenerator {
 
         addCell(table, "Conductor Adicional:", contract.getAdditionalDriverName(), 1);
         addCell(table, "Licencia:", contract.getAdditionalDriverLicense() != null ? contract.getAdditionalDriverLicense() : "-", 1);
-        addCell(table, "DUI:", contract.getAdditionalDriverDui() != null ? contract.getAdditionalDriverDui() : "-", 1);
+        addCell(table, "Doc. Identidad:", contract.getAdditionalDriverDui() != null ? contract.getAdditionalDriverDui() : "-", 1);
 
         document.add(table);
         document.add(new Paragraph().setMarginBottom(8));
