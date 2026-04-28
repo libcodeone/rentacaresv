@@ -318,7 +318,6 @@ public class RentalFormDialog extends Dialog {
         diasFueraPaisField = new IntegerField("Días fuera del país");
         diasFueraPaisField.setMin(1);
         diasFueraPaisField.setMax(365);
-        diasFueraPaisField.setValue(0);
         diasFueraPaisField.setStepButtonsVisible(true);
         diasFueraPaisField.setEnabled(false);
 
@@ -332,7 +331,7 @@ public class RentalFormDialog extends Dialog {
             diasFueraPaisField.setEnabled(checked);
             if (!checked) {
                 destinosField.clear();
-                diasFueraPaisField.setValue(0);
+                diasFueraPaisField.setValue(null);
             }
             calculatePrice();
         });
@@ -410,8 +409,8 @@ public class RentalFormDialog extends Dialog {
         binder.forField(destinosField).bind("destinosFueraPais");
         binder.forField(diasFueraPaisField)
                 .withConverter(
-                        val -> val != null ? val : 0,
-                        val -> val != null ? val : 0)
+                        val -> val,          // Integer → Integer (null permitido)
+                        val -> val)          // Integer → Integer (null permitido)
                 .bind("diasFueraPais");
 
         binder.readBean(command);
