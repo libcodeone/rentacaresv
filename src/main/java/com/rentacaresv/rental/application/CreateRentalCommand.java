@@ -61,7 +61,7 @@ public class CreateRentalCommand {
     private String destinosFueraPais;
 
     @Min(value = 0)
-    private int diasFueraPais = 0;
+    private Integer diasFueraPais;
 
     /**
      * Valida que la fecha de fin sea después de la fecha de inicio

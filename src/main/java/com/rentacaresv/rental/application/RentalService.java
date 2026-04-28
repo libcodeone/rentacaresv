@@ -98,7 +98,7 @@ public class RentalService {
 
         // 4.1 Cargo adicional por salida del país
         BigDecimal cargoSacarPais = BigDecimal.ZERO;
-        if (command.isSacarPais() && command.getDiasFueraPais() > 0) {
+        if (command.isSacarPais() && command.getDiasFueraPais() != null && command.getDiasFueraPais() > 0) {
             BigDecimal tarifaSacarPais = settingsCache.getSettings().getTarifaSacarPais();
             if (tarifaSacarPais != null && tarifaSacarPais.compareTo(BigDecimal.ZERO) > 0) {
                 cargoSacarPais = tarifaSacarPais.multiply(BigDecimal.valueOf(command.getDiasFueraPais()));
