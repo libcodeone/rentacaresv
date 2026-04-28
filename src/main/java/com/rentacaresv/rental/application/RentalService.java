@@ -124,7 +124,7 @@ public class RentalService {
                 .notes(command.getNotes())
                 .sacarPais(command.isSacarPais())
                 .destinosFueraPais(command.getDestinosFueraPais())
-                .diasFueraPais(command.getDiasFueraPais() > 0 ? command.getDiasFueraPais() : null)
+                .diasFueraPais(command.getDiasFueraPais() != null && command.getDiasFueraPais() > 0 ? command.getDiasFueraPais() : null)
                 .cargoSacarPais(cargoSacarPais.compareTo(BigDecimal.ZERO) > 0 ? cargoSacarPais : null)
                 .build();
 
