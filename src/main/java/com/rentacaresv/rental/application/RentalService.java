@@ -476,11 +476,17 @@ public class RentalService {
         Rental rental = rentalRepository.findById(rentalId)
                 .orElseThrow(() -> new IllegalArgumentException("Renta no encontrada"));
 
+        if (rental.getStatus() != RentalStatus.CANCELLED) {
+            throw new IllegalStateException(
+                    "Solo se pueden eliminar rentas canceladas. Estado actual: " + rental.getStatus().getLabel());
+        }
+
         // Eliminar evento de Google Calendar antes del soft delete
         deleteRentalFromGoogleCalendar(rental);
 
-        rental.delete(); // Lógica de dominio
+        rental.delete(); // Soft delete — establece deletedAt
         rentalRepository.save(rental);
+        log.info("Renta {} eliminada (soft delete)", rental.getContractNumber());
     }
 
     /**
