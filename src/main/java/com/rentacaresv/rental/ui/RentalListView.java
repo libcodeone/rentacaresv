@@ -191,7 +191,7 @@ public class RentalListView extends VerticalLayout {
         // Acciones (PRIMERA - FIJA, no ordenable)
         grid.addComponentColumn(this::createActionButtons)
                 .setHeader("Acciones")
-                .setWidth("180px")
+                .setWidth("260px")
                 .setFlexGrow(0)
                 .setFrozen(true)
                 .setSortable(false);
@@ -336,6 +336,8 @@ public class RentalListView extends VerticalLayout {
     private Component createActionButtons(RentalDTO rental) {
         HorizontalLayout actions = new HorizontalLayout();
         actions.setSpacing(false);
+        actions.setPadding(false);
+        actions.getStyle().set("flex-wrap", "nowrap");
 
         // Ver Detalles
         Button detailsButton = new Button(VaadinIcon.EYE.create());
@@ -392,6 +394,14 @@ public class RentalListView extends VerticalLayout {
             returnButton.getElement().setAttribute("title", "Recibir Devolución");
             returnButton.addClickListener(e -> openReturnDialog(rental));
             actions.add(returnButton);
+        }
+
+        if ("CANCELLED".equals(rental.getStatus())) {
+            Button deleteButton = new Button(VaadinIcon.TRASH.create());
+            deleteButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
+            deleteButton.getElement().setAttribute("title", "Eliminar");
+            deleteButton.addClickListener(e -> confirmDelete(rental));
+            actions.add(deleteButton);
         }
 
         return actions;
@@ -481,6 +491,37 @@ public class RentalListView extends VerticalLayout {
         });
 
         confirmDialog.open();
+    }
+
+    private void confirmDelete(RentalDTO rental) {
+        com.vaadin.flow.component.confirmdialog.ConfirmDialog dialog =
+                new com.vaadin.flow.component.confirmdialog.ConfirmDialog();
+
+        dialog.setHeader("⚠️ Eliminar Renta Cancelada");
+        dialog.setText(String.format(
+                "¿Está seguro de eliminar permanentemente la renta %s?\n\n" +
+                "Cliente: %s\nVehículo: %s\n\n" +
+                "Esta acción no se puede deshacer y el registro desaparecerá del sistema.",
+                rental.getContractNumber(),
+                rental.getCustomerName(),
+                rental.getVehicleLicensePlate()));
+
+        dialog.setCancelable(true);
+        dialog.setCancelText("No, conservar");
+        dialog.setConfirmText("Sí, eliminar");
+        dialog.setConfirmButtonTheme("error primary");
+
+        dialog.addConfirmListener(e -> {
+            try {
+                rentalService.deleteRental(rental.getId());
+                refreshData();
+                showSuccessNotification("Renta eliminada correctamente");
+            } catch (Exception ex) {
+                showErrorNotification("Error al eliminar: " + ex.getMessage());
+            }
+        });
+
+        dialog.open();
     }
 
     private void showOverdueRentals() {
