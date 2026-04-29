@@ -367,6 +367,12 @@ public class RentalListView extends VerticalLayout {
 
         // Acciones según estado
         if ("PENDING".equals(rental.getStatus())) {
+            Button editButton = new Button(VaadinIcon.EDIT.create());
+            editButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+            editButton.getElement().setAttribute("title", "Editar Renta");
+            editButton.addClickListener(e -> openEditDialog(rental));
+            actions.add(editButton);
+
             Button deliverButton = new Button(VaadinIcon.CAR.create());
             deliverButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_SUCCESS);
             deliverButton.getElement().setAttribute("title", "Entregar Vehículo");
@@ -398,6 +404,16 @@ public class RentalListView extends VerticalLayout {
         dialog.addSaveListener(e -> {
             refreshData();
             showSuccessNotification("Renta creada exitosamente");
+        });
+        dialog.open();
+    }
+
+    private void openEditDialog(RentalDTO rental) {
+        java.math.BigDecimal tarifaSacarPais = settingsCache.getSettings().getTarifaSacarPais();
+        RentalEditDialog dialog = new RentalEditDialog(rentalService, customerService, tarifaSacarPais, rental);
+        dialog.addSaveListener(e -> {
+            refreshData();
+            showSuccessNotification("Renta actualizada exitosamente");
         });
         dialog.open();
     }

@@ -141,6 +141,86 @@ public class RentalService {
     }
 
     /**
+     * Edita una renta existente (solo si está en estado PENDING).
+     * Permite cambiar fechas, cliente, itinerario y datos de salida del país.
+     * Recalcula el total si cambian las fechas o el cargo por salida del país.
+     */
+    public RentalDTO updateRental(@Valid UpdateRentalCommand command) {
+        log.info("Editando renta {}", command.getRentalId());
+
+        command.validate();
+
+        Rental rental = rentalRepository.findById(command.getRentalId())
+                .orElseThrow(() -> new IllegalArgumentException("Renta no encontrada"));
+
+        if (!rental.canBeModified()) {
+            throw new IllegalStateException(
+                    "Solo se puede editar una renta en estado PENDING. Estado actual: " + rental.getStatus().getLabel());
+        }
+
+        // Cambio de cliente
+        if (!rental.getCustomer().getId().equals(command.getCustomerId())) {
+            Customer newCustomer = customerRepository.findById(command.getCustomerId())
+                    .orElseThrow(() -> new IllegalArgumentException("Cliente no encontrado"));
+            if (!newCustomer.isActiveCustomer()) {
+                throw new IllegalStateException("El cliente " + newCustomer.getFullName() + " no está activo");
+            }
+            rental.setCustomer(newCustomer);
+        }
+
+        // Conflicto de fechas (excluyendo esta misma renta)
+        if (rentalRepository.hasConflictingRentalsExcluding(
+                rental.getVehicle().getId(),
+                command.getStartDate(),
+                command.getEndDate(),
+                rental.getId())) {
+            throw new IllegalStateException(
+                    "El vehículo ya está rentado en ese rango de fechas. Por favor selecciona otras fechas.");
+        }
+
+        // Recalcular precio con nuevas fechas y cliente
+        int days = priceCalculator.calculateDays(command.getStartDate(), command.getEndDate());
+        BigDecimal dailyRate = priceCalculator.selectDailyRate(rental.getVehicle(), rental.getCustomer(), days);
+        BigDecimal totalAmount = dailyRate.multiply(BigDecimal.valueOf(days));
+
+        // Cargo por salida del país
+        BigDecimal cargoSacarPais = BigDecimal.ZERO;
+        if (command.isSacarPais() && command.getDiasFueraPais() != null && command.getDiasFueraPais() > 0) {
+            BigDecimal tarifaSacarPais = settingsCache.getSettings().getTarifaSacarPais();
+            if (tarifaSacarPais != null && tarifaSacarPais.compareTo(BigDecimal.ZERO) > 0) {
+                cargoSacarPais = tarifaSacarPais.multiply(BigDecimal.valueOf(command.getDiasFueraPais()));
+                totalAmount = totalAmount.add(cargoSacarPais);
+            }
+        }
+
+        // Aplicar cambios
+        rental.setStartDate(command.getStartDate());
+        rental.setEndDate(command.getEndDate());
+        rental.setTotalDays(days);
+        rental.setDailyRate(dailyRate);
+        rental.setTotalAmount(totalAmount);
+        rental.setNotes(command.getNotes());
+        rental.setFlightNumber(command.getFlightNumber());
+        rental.setTravelItinerary(command.getTravelItinerary());
+        rental.setAccommodation(command.getAccommodation());
+        rental.setContactPhone(command.getContactPhone());
+        rental.setSacarPais(command.isSacarPais());
+        rental.setDestinosFueraPais(command.getDestinosFueraPais());
+        rental.setDiasFueraPais(command.getDiasFueraPais() != null && command.getDiasFueraPais() > 0
+                ? command.getDiasFueraPais() : null);
+        rental.setCargoSacarPais(cargoSacarPais.compareTo(BigDecimal.ZERO) > 0 ? cargoSacarPais : null);
+
+        rental = rentalRepository.save(rental);
+
+        log.info("Renta {} actualizada: {} días, total ${}", rental.getContractNumber(), days, totalAmount);
+
+        // Actualizar Google Calendar si está sincronizado
+        updateRentalInGoogleCalendar(rental);
+
+        return rentalMapper.toDTO(rental);
+    }
+
+    /**
      * Entrega el vehículo al cliente (inicia la renta) - CON NOTAS
      */
     public void deliverRental(Long rentalId, String notes) {
