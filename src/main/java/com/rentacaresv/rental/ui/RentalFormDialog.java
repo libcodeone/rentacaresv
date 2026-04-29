@@ -793,7 +793,7 @@ public class RentalFormDialog extends Dialog {
             return;
         }
 
-        long days = ChronoUnit.DAYS.between(range.getStartDate(), range.getEndDate());
+        long days = ChronoUnit.DAYS.between(range.getStartDate(), range.getEndDate()) + 1;
 
         if (days <= 0) {
             daysLabel.setText("Días: -");

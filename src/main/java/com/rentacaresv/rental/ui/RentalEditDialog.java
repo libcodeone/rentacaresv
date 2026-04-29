@@ -362,7 +362,7 @@ public class RentalEditDialog extends Dialog {
             return;
         }
 
-        long days = java.time.temporal.ChronoUnit.DAYS.between(range.getStartDate(), range.getEndDate());
+        long days = java.time.temporal.ChronoUnit.DAYS.between(range.getStartDate(), range.getEndDate()) + 1;
         if (days <= 0) {
             daysLabel.setText("Días: —");
             priceLabel.setText("Total estimado: —");
