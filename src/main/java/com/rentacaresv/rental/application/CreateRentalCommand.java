@@ -26,7 +26,7 @@ public class CreateRentalCommand {
     private Long customerId;
 
     @NotNull(message = "La fecha de inicio es obligatoria")
-    @Future(message = "La fecha de inicio debe ser futura")
+    @FutureOrPresent(message = "La fecha de inicio no puede ser en el pasado")
     private LocalDate startDate;
 
     @NotNull(message = "La fecha de fin es obligatoria")
