@@ -22,7 +22,7 @@ import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.Menu;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
-import jakarta.annotation.security.PermitAll;
+import jakarta.annotation.security.RolesAllowed;
 import org.vaadin.lineawesome.LineAwesomeIconUrl;
 
 import java.util.List;
@@ -34,7 +34,7 @@ import java.util.List;
 @Route(value = "customers", layout = MainLayout.class)
 @PageTitle("Gestión de Clientes")
 @Menu(order = 2, icon = LineAwesomeIconUrl.USER_FRIENDS_SOLID)
-@PermitAll
+@RolesAllowed({"ADMIN", "OPERATOR"})
 public class CustomerListView extends VerticalLayout {
 
     private final CustomerService customerService;
