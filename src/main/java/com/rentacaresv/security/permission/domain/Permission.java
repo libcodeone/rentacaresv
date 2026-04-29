@@ -29,6 +29,7 @@ public enum Permission {
     RENTAL_CREATE("Rentas", "Crear rentas", "Permite crear nuevas rentas"),
     RENTAL_EDIT("Rentas", "Editar rentas", "Permite modificar información de rentas"),
     RENTAL_DELETE("Rentas", "Eliminar rentas", "Permite eliminar rentas del sistema"),
+    RENTAL_DELIVER("Rentas", "Entregar vehículos", "Permite registrar la entrega de un vehículo al cliente"),
     RENTAL_COMPLETE("Rentas", "Completar rentas", "Permite marcar rentas como completadas"),
     RENTAL_CANCEL("Rentas", "Cancelar rentas", "Permite cancelar rentas activas"),
     
