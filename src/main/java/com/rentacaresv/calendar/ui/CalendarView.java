@@ -25,7 +25,7 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.tabs.TabSheet;
 import com.vaadin.flow.router.*;
-import jakarta.annotation.security.PermitAll;
+import jakarta.annotation.security.RolesAllowed;
 import lombok.extern.slf4j.Slf4j;
 import org.vaadin.lineawesome.LineAwesomeIconUrl;
 
@@ -43,7 +43,7 @@ import java.util.stream.Collectors;
 @PageTitle("Calendario")
 @Route(value = "calendar", layout = MainLayout.class)
 @Menu(order = 1, icon = LineAwesomeIconUrl.CALENDAR)
-@PermitAll
+@RolesAllowed({"ADMIN", "OPERATOR"})
 @Slf4j
 public class CalendarView extends VerticalLayout implements HasUrlParameter<String>, BeforeEnterObserver {
 
