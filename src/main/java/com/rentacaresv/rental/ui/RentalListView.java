@@ -9,6 +9,8 @@ import com.rentacaresv.rental.application.RentalDTO;
 import com.rentacaresv.rental.application.RentalPhotoService;
 import com.rentacaresv.rental.application.RentalService;
 import com.rentacaresv.rental.domain.RentalStatus;
+import com.rentacaresv.security.AuthenticatedUser;
+import com.rentacaresv.security.Role;
 import com.rentacaresv.settings.application.SettingsCache;
 import com.rentacaresv.shared.storage.StorageInitializer;
 import com.rentacaresv.shared.util.FormatUtils;
@@ -60,6 +62,16 @@ public class RentalListView extends VerticalLayout {
     private final StorageInitializer storageInitializer;
     private final ContractService contractService;
     private final SettingsCache settingsCache;
+    private final AuthenticatedUser authenticatedUser;
+
+    // Flags de permisos calculados una sola vez en el constructor
+    private final boolean isAgent;   // solo entrega + contratos
+    private final boolean canCreate;
+    private final boolean canEdit;
+    private final boolean canCancel;
+    private final boolean canDelete;
+    private final boolean canPay;
+    private final boolean canReturn;
 
     private Grid<RentalDTO> grid;
     private TextField searchField;
@@ -76,7 +88,8 @@ public class RentalListView extends VerticalLayout {
             RentalPhotoService rentalPhotoService,
             StorageInitializer storageInitializer,
             ContractService contractService,
-            SettingsCache settingsCache) {
+            SettingsCache settingsCache,
+            AuthenticatedUser authenticatedUser) {
 
         this.rentalService = rentalService;
         this.vehicleService = vehicleService;
@@ -87,6 +100,20 @@ public class RentalListView extends VerticalLayout {
         this.storageInitializer = storageInitializer;
         this.contractService = contractService;
         this.settingsCache = settingsCache;
+        this.authenticatedUser = authenticatedUser;
+
+        // Calcular flags de permisos una sola vez
+        boolean agent = authenticatedUser.get()
+                .map(u -> u.hasRole(Role.AGENT) && !u.isAdmin())
+                .orElse(false);
+        boolean admin = authenticatedUser.get().map(u -> u.isAdmin()).orElse(false);
+        this.isAgent   = agent;
+        this.canCreate = !agent;
+        this.canEdit   = !agent;
+        this.canCancel = !agent;
+        this.canDelete = admin;
+        this.canPay    = !agent;
+        this.canReturn = !agent;
 
         setSizeFull();
         setPadding(true);
@@ -174,6 +201,7 @@ public class RentalListView extends VerticalLayout {
         Button addButton = new Button("Nueva Renta", VaadinIcon.PLUS.create());
         addButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         addButton.addClickListener(e -> openRentalDialog());
+        addButton.setVisible(canCreate);
 
         HorizontalLayout toolbar = new HorizontalLayout(searchField, statusFilter, showOverdueButton, addButton);
         toolbar.setWidthFull();
@@ -358,8 +386,8 @@ public class RentalListView extends VerticalLayout {
         contractButton.addClickListener(e -> openContractDialog(rental));
         actions.add(contractButton);
 
-        // Registrar Pago
-        if (rental.getBalance() != null && rental.getBalance().compareTo(java.math.BigDecimal.ZERO) > 0) {
+        // Registrar Pago (solo si tiene saldo y tiene permiso)
+        if (canPay && rental.getBalance() != null && rental.getBalance().compareTo(java.math.BigDecimal.ZERO) > 0) {
             Button paymentButton = new Button(VaadinIcon.MONEY.create());
             paymentButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_SUCCESS);
             paymentButton.getElement().setAttribute("title", "Registrar Pago");
@@ -369,26 +397,31 @@ public class RentalListView extends VerticalLayout {
 
         // Acciones según estado
         if ("PENDING".equals(rental.getStatus())) {
-            Button editButton = new Button(VaadinIcon.EDIT.create());
-            editButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
-            editButton.getElement().setAttribute("title", "Editar Renta");
-            editButton.addClickListener(e -> openEditDialog(rental));
-            actions.add(editButton);
+            if (canEdit) {
+                Button editButton = new Button(VaadinIcon.EDIT.create());
+                editButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
+                editButton.getElement().setAttribute("title", "Editar Renta");
+                editButton.addClickListener(e -> openEditDialog(rental));
+                actions.add(editButton);
+            }
 
+            // El AGENT puede entregar
             Button deliverButton = new Button(VaadinIcon.CAR.create());
             deliverButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_SUCCESS);
             deliverButton.getElement().setAttribute("title", "Entregar Vehículo");
             deliverButton.addClickListener(e -> openDeliveryDialog(rental));
             actions.add(deliverButton);
 
-            Button cancelButton = new Button(VaadinIcon.CLOSE.create());
-            cancelButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_ERROR);
-            cancelButton.getElement().setAttribute("title", "Cancelar");
-            cancelButton.addClickListener(e -> cancelRental(rental));
-            actions.add(cancelButton);
+            if (canCancel) {
+                Button cancelButton = new Button(VaadinIcon.CLOSE.create());
+                cancelButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_ERROR);
+                cancelButton.getElement().setAttribute("title", "Cancelar");
+                cancelButton.addClickListener(e -> cancelRental(rental));
+                actions.add(cancelButton);
+            }
         }
 
-        if ("ACTIVE".equals(rental.getStatus())) {
+        if ("ACTIVE".equals(rental.getStatus()) && canReturn) {
             Button returnButton = new Button(VaadinIcon.SIGN_IN.create());
             returnButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_PRIMARY);
             returnButton.getElement().setAttribute("title", "Recibir Devolución");
@@ -396,7 +429,7 @@ public class RentalListView extends VerticalLayout {
             actions.add(returnButton);
         }
 
-        if ("CANCELLED".equals(rental.getStatus())) {
+        if ("CANCELLED".equals(rental.getStatus()) && canDelete) {
             Button deleteButton = new Button(VaadinIcon.TRASH.create());
             deleteButton.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
             deleteButton.getElement().setAttribute("title", "Eliminar");

@@ -270,8 +270,11 @@ public class RolePermissionService {
                     Permission.RENTAL_VIEW,
                     Permission.RENTAL_CREATE,
                     Permission.RENTAL_EDIT,
+                    Permission.RENTAL_DELIVER,
+                    Permission.RENTAL_CANCEL,
                     Permission.CONTRACT_VIEW,
                     Permission.CONTRACT_CREATE,
+                    Permission.CONTRACT_SIGN,
                     Permission.CONTRACT_DOWNLOAD,
                     Permission.PAYMENT_VIEW,
                     Permission.PAYMENT_CREATE,
@@ -290,6 +293,29 @@ public class RolePermissionService {
                     .build();
             roleRepository.save(operator);
             log.info("Rol OPERATOR inicializado con permisos básicos");
+        }
+
+        // Rol AGENT - agente de entrega
+        if (!roleRepository.existsByName("AGENT")) {
+            Set<Permission> agentPermissions = new HashSet<>(Arrays.asList(
+                    Permission.RENTAL_VIEW,
+                    Permission.RENTAL_DELIVER,
+                    Permission.CONTRACT_VIEW,
+                    Permission.CONTRACT_SIGN,
+                    Permission.CONTRACT_DOWNLOAD
+            ));
+
+            SystemRole agent = SystemRole.builder()
+                    .name("AGENT")
+                    .displayName("Agente de Entrega")
+                    .description("Solo puede ver rentas, gestionar contratos y entregar vehículos")
+                    .color("#059669") // Verde esmeralda
+                    .isSystemRole(true)
+                    .active(true)
+                    .permissions(agentPermissions)
+                    .build();
+            roleRepository.save(agent);
+            log.info("Rol AGENT inicializado con permisos de entrega");
         }
     }
 }
