@@ -73,7 +73,7 @@ jobs:
         with:
           host: ${{ vars.SERVER_HOST }}
           username: ${{ vars.SERVER_USER }}
-          key: ${{ vars.SERVER_SSH_KEY }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ vars.SERVER_PORT || 22 }}
           source: "target/${{ env.APP_NAME }}"
           target: "${{ env.DEPLOY_PATH }}/temp"
@@ -84,7 +84,7 @@ jobs:
         with:
           host: ${{ vars.SERVER_HOST }}
           username: ${{ vars.SERVER_USER }}
-          key: ${{ vars.SERVER_SSH_KEY }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ vars.SERVER_PORT || 22 }}
           script: |
             set -e
@@ -163,7 +163,7 @@ jobs:
         with:
           host: ${{ vars.SERVER_HOST }}
           username: ${{ vars.SERVER_USER }}
-          key: ${{ vars.SERVER_SSH_KEY }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ vars.SERVER_PORT || 22 }}
           script: |
             SERVICE_NAME="rentacaresv-native"
