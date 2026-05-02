@@ -16,18 +16,18 @@ jobs:
   # JOB 1: Compilar Native Image con GraalVM
   # ============================================
   build-native:
-    name: Compile Native Image (GraalVM JDK 25)
+    name: Compile Native Image (GraalVM JDK 21)
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Configurar GraalVM CE JDK 25
+      - name: Configurar GraalVM CE JDK 21
         uses: graalvm/setup-graalvm@v1
         with:
-          java-version: '25'
-          distribution: 'graalvm'
+          java-version: '21'
+          distribution: 'graalvm-community'
           cache: 'maven'
 
       - name: Cache Maven ~/.m2
