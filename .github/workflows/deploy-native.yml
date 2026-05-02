@@ -37,13 +37,8 @@ jobs:
           key: ${{ runner.os }}-m2-native-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2-native
 
-      - name: Agregar swap (8GB) para el linker
-        run: |
-          sudo dd if=/dev/zero of=/swapfile bs=1M count=8192 status=progress
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          free -h
+      - name: Instalar mold (linker eficiente en memoria)
+        run: sudo apt-get install -y mold
 
       - name: Compilar Native Image
         run: mvn -Pnative,production -DskipTests -e native:compile
