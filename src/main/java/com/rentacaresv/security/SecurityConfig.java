@@ -56,7 +56,8 @@ public class SecurityConfig {
                     "/api/google-calendar/callback", // OAuth2 callback de Google Calendar
                     "/forgot-password",    // Recuperación de contraseña
                     "/reset-password",     // Restablecer contraseña
-                    "/api/public/**"       // API pública para la web
+                    "/api/public/**",       // API pública para la web
+                    "/actuator/health/**"   // Health checks para monitoring
                 ).permitAll())
                 .authorizeHttpRequests(authorize -> authorize
                     .requestMatchers("/api/admin/**").hasRole("ADMIN"));
