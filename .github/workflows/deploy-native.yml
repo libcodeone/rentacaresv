@@ -37,8 +37,11 @@ jobs:
           key: ${{ runner.os }}-m2-native-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2-native
 
-      - name: Instalar mold (linker eficiente en memoria)
-        run: sudo apt-get install -y mold
+      - name: Instalar mold y usarlo como linker del sistema
+        run: |
+          sudo apt-get install -y mold
+          sudo update-alternatives --install /usr/bin/ld ld /usr/bin/mold 100
+          ld --version
 
       - name: Compilar Native Image
         run: mvn -Pnative,production -DskipTests -e native:compile

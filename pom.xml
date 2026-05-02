@@ -300,7 +300,6 @@
                             <buildArgs>
                                 <buildArg>-H:+ReportExceptionStackTraces</buildArg>
                                 <buildArg>-Ob</buildArg>
-                                <buildArg>-H:CLinkerOption=-fuse-ld=mold</buildArg>
                             </buildArgs>
                         </configuration>
                     </plugin>
