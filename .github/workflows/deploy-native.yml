@@ -39,7 +39,7 @@ jobs:
 
       - name: Agregar swap (8GB) para el linker
         run: |
-          sudo fallocate -l 8G /swapfile
+          sudo dd if=/dev/zero of=/swapfile bs=1M count=8192 status=progress
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
