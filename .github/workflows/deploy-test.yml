@@ -1,0 +1,150 @@
+name: Build and Deploy RentaCar ESV - TEST
+
+on:
+  push:
+    branches: [ test ]
+  workflow_dispatch:
+
+env:
+  JAVA_VERSION: '21'
+  APP_NAME: rentacaresv
+  DEPLOY_PATH: /opt/rentacaresv
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Build con Maven (sin tests)
+        run: mvn clean package -DskipTests -Pproduction
+
+      - name: Subir artefacto JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar-test
+          path: target/*.jar
+          retention-days: 1
+
+  deploy:
+    name: Deploy to TEST Server
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/test'
+    
+    environment: rentacares_test
+    
+    steps:
+      - name: Descargar artefacto JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: app-jar-test
+          path: ./target
+
+      - name: Obtener nombre del JAR
+        id: jar-name
+        run: |
+          JAR_FILE=$(ls target/*.jar | head -1)
+          echo "jar_file=$JAR_FILE" >> $GITHUB_OUTPUT
+          echo "JAR encontrado: $JAR_FILE"
+
+      - name: Copiar JAR al servidor
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ vars.SERVER_HOST }}
+          username: ${{ vars.SERVER_USER }}
+          key: ${{ vars.SERVER_SSH_KEY }}
+          port: ${{ vars.SERVER_PORT || 22 }}
+          source: "target/*.jar"
+          target: "${{ env.DEPLOY_PATH }}/temp"
+          strip_components: 1
+
+      - name: Deploy y reiniciar aplicación
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ vars.SERVER_HOST }}
+          username: ${{ vars.SERVER_USER }}
+          key: ${{ vars.SERVER_SSH_KEY }}
+          port: ${{ vars.SERVER_PORT || 22 }}
+          script: |
+            set -e
+            
+            echo "=========================================="
+            echo "Iniciando deploy de RentaCar ESV - TEST"
+            echo "=========================================="
+            
+            APP_DIR="/opt/rentacaresv"
+            JAR_NAME="rentacaresv.jar"
+            SERVICE_NAME="rentacaresv"
+            
+            sudo mkdir -p $APP_DIR
+            sudo mkdir -p $APP_DIR/logs
+            sudo mkdir -p $APP_DIR/backup
+            
+            if [ -f "$APP_DIR/$JAR_NAME" ]; then
+              echo "Creando backup del JAR anterior..."
+              sudo cp $APP_DIR/$JAR_NAME $APP_DIR/backup/$JAR_NAME.$(date +%Y%m%d_%H%M%S)
+            fi
+            
+            echo "Moviendo nuevo JAR..."
+            sudo mv $APP_DIR/temp/*.jar $APP_DIR/$JAR_NAME
+            sudo rm -rf $APP_DIR/temp
+            
+            sudo chown -R $USER:$USER $APP_DIR
+            sudo chmod +x $APP_DIR/$JAR_NAME
+            
+            echo "Reiniciando servicio..."
+            sudo systemctl restart $SERVICE_NAME
+            echo "Servicio reiniciado via systemctl"
+            
+            if [ -d "$APP_DIR/backup" ]; then
+              cd $APP_DIR/backup
+              ls -t 2>/dev/null | tail -n +6 | xargs -r rm -- 2>/dev/null || true
+            fi
+            
+            echo "=========================================="
+            echo "Deploy completado"
+            echo "=========================================="
+
+      - name: Verificar aplicación
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ vars.SERVER_HOST }}
+          username: ${{ vars.SERVER_USER }}
+          key: ${{ vars.SERVER_SSH_KEY }}
+          port: ${{ vars.SERVER_PORT || 22 }}
+          script: |
+            echo "Esperando 20 segundos a que la aplicación inicie..."
+            sleep 20
+            
+            if pgrep -f "rentacaresv.jar" > /dev/null; then
+              echo "Proceso Java está corriendo"
+              
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8091 2>/dev/null || echo "000")
+              
+              if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
+                echo "Aplicación respondiendo correctamente (HTTP $HTTP_CODE)"
+              else
+                echo "Aplicación iniciando... (HTTP $HTTP_CODE). Verificar logs en /opt/rentacaresv/logs/app.log"
+              fi
+            else
+              echo "ADVERTENCIA: El proceso no está corriendo. Revisar logs."
+              tail -50 /opt/rentacaresv/logs/app.log 2>/dev/null || echo "No hay logs disponibles"
+            fi
