@@ -70,7 +70,7 @@ jobs:
         with:
           host: ${{ vars.SERVER_HOST }}
           username: ${{ vars.SERVER_USER }}
-          key: ${{ vars.SERVER_SSH_KEY }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ vars.SERVER_PORT || 22 }}
           source: "target/*.jar"
           target: "${{ env.DEPLOY_PATH }}/temp"
@@ -81,7 +81,7 @@ jobs:
         with:
           host: ${{ vars.SERVER_HOST }}
           username: ${{ vars.SERVER_USER }}
-          key: ${{ vars.SERVER_SSH_KEY }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ vars.SERVER_PORT || 22 }}
           script: |
             set -e
@@ -128,7 +128,7 @@ jobs:
         with:
           host: ${{ vars.SERVER_HOST }}
           username: ${{ vars.SERVER_USER }}
-          key: ${{ vars.SERVER_SSH_KEY }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ vars.SERVER_PORT || 22 }}
           script: |
             echo "Esperando 20 segundos a que la aplicación inicie..."
