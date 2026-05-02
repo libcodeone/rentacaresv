@@ -299,6 +299,7 @@
                             <fallback>false</fallback>
                             <buildArgs>
                                 <buildArg>-H:+ReportExceptionStackTraces</buildArg>
+                                <buildArg>-Ob</buildArg>
                             </buildArgs>
                         </configuration>
                     </plugin>

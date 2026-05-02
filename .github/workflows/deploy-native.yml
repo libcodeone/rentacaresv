@@ -37,6 +37,14 @@ jobs:
           key: ${{ runner.os }}-m2-native-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2-native
 
+      - name: Agregar swap (8GB) para el linker
+        run: |
+          sudo fallocate -l 8G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
+
       - name: Compilar Native Image
         run: mvn -Pnative,production -DskipTests -e native:compile
 
