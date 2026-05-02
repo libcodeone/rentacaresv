@@ -1,0 +1,209 @@
+name: Build Native Image & Deploy RentaCar ESV
+
+on:
+  push:
+    branches: [ graalvm ]
+  workflow_dispatch:
+
+env:
+  APP_NAME: rentacaresv
+  BINARY_NAME: rentacaresv-native
+  SERVICE_NAME: rentacaresv-native
+  DEPLOY_PATH: /opt/rentacaresv
+
+jobs:
+  # ============================================
+  # JOB 1: Compilar Native Image con GraalVM
+  # ============================================
+  build-native:
+    name: Compile Native Image (GraalVM JDK 25)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar GraalVM CE JDK 25
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm'
+          cache: 'maven'
+
+      - name: Cache Maven ~/.m2
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-native-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2-native
+
+      - name: Compilar Native Image
+        run: mvn -Pnative,production -DskipTests -e native:compile
+
+      - name: Verificar binario generado
+        run: |
+          ls -lh target/${{ env.APP_NAME }}
+          file target/${{ env.APP_NAME }}
+
+      - name: Subir binario como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-binary
+          path: target/${{ env.APP_NAME }}
+          retention-days: 3
+
+  # ============================================
+  # JOB 2: Deploy binario al servidor
+  # ============================================
+  deploy:
+    name: Deploy Native Binary to Server
+    needs: build-native
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar binario nativo
+        uses: actions/download-artifact@v4
+        with:
+          name: native-binary
+          path: ./target
+
+      - name: Copiar binario al servidor
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ vars.SERVER_HOST }}
+          username: ${{ vars.SERVER_USER }}
+          key: ${{ vars.SERVER_SSH_KEY }}
+          port: ${{ vars.SERVER_PORT || 22 }}
+          source: "target/${{ env.APP_NAME }}"
+          target: "${{ env.DEPLOY_PATH }}/temp"
+          strip_components: 1
+
+      - name: Instalar, configurar y arrancar servicio systemd
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ vars.SERVER_HOST }}
+          username: ${{ vars.SERVER_USER }}
+          key: ${{ vars.SERVER_SSH_KEY }}
+          port: ${{ vars.SERVER_PORT || 22 }}
+          script: |
+            set -e
+
+            APP_DIR="/opt/rentacaresv"
+            BINARY_NAME="rentacaresv-native"
+            SERVICE_NAME="rentacaresv-native"
+            SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+            APP_USER="$USER"
+
+            echo "=========================================="
+            echo " Deploy RentaCar ESV — Native Image"
+            echo "=========================================="
+
+            # Estructura de directorios
+            sudo mkdir -p $APP_DIR/logs $APP_DIR/backup $APP_DIR/temp
+
+            # Backup del binario anterior si existe
+            if [ -f "$APP_DIR/$BINARY_NAME" ]; then
+              echo "Creando backup del binario anterior..."
+              sudo cp $APP_DIR/$BINARY_NAME $APP_DIR/backup/${BINARY_NAME}.$(date +%Y%m%d_%H%M%S)
+            fi
+
+            # Detener servicio si está corriendo
+            if sudo systemctl is-active --quiet $SERVICE_NAME 2>/dev/null; then
+              echo "Deteniendo servicio $SERVICE_NAME..."
+              sudo systemctl stop $SERVICE_NAME
+            fi
+
+            # Instalar nuevo binario
+            echo "Instalando nuevo binario..."
+            sudo mv $APP_DIR/temp/rentacaresv $APP_DIR/$BINARY_NAME
+            sudo chown ${APP_USER}:${APP_USER} $APP_DIR/$BINARY_NAME
+            sudo chmod 755 $APP_DIR/$BINARY_NAME
+            sudo rm -rf $APP_DIR/temp
+
+            # Crear/actualizar unit de systemd
+            echo "Configurando servicio systemd..."
+            sudo tee $SERVICE_FILE > /dev/null <<UNIT
+            [Unit]
+            Description=RentaCar ESV — Native Image (GraalVM)
+            After=network-online.target
+            Wants=network-online.target
+
+            [Service]
+            Type=simple
+            User=${APP_USER}
+            WorkingDirectory=/opt/rentacaresv
+            EnvironmentFile=-/opt/rentacaresv/.env
+            ExecStart=/opt/rentacaresv/rentacaresv-native --spring.profiles.active=prod
+            Restart=on-failure
+            RestartSec=10
+            StandardOutput=append:/opt/rentacaresv/logs/app.log
+            StandardError=append:/opt/rentacaresv/logs/app.log
+            SyslogIdentifier=rentacaresv-native
+
+            [Install]
+            WantedBy=multi-user.target
+            UNIT
+
+            # Recargar daemon y arrancar
+            sudo systemctl daemon-reload
+            sudo systemctl enable $SERVICE_NAME
+            sudo systemctl start $SERVICE_NAME
+
+            # Limpiar backups (mantener últimos 5)
+            cd $APP_DIR/backup
+            ls -t 2>/dev/null | tail -n +6 | xargs -r rm -- 2>/dev/null || true
+
+            echo "=========================================="
+            echo " Deploy completado"
+            echo "=========================================="
+
+      - name: Verificar que la aplicación arrancó
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ vars.SERVER_HOST }}
+          username: ${{ vars.SERVER_USER }}
+          key: ${{ vars.SERVER_SSH_KEY }}
+          port: ${{ vars.SERVER_PORT || 22 }}
+          script: |
+            SERVICE_NAME="rentacaresv-native"
+
+            echo "Esperando 15 segundos al arranque del binario nativo..."
+            sleep 15
+
+            if sudo systemctl is-active --quiet $SERVICE_NAME; then
+              echo "Servicio $SERVICE_NAME activo"
+              sudo systemctl status $SERVICE_NAME --no-pager -l | head -25
+            else
+              echo "ERROR: el servicio no arrancó correctamente"
+              sudo journalctl -u $SERVICE_NAME --no-pager -n 60
+              exit 1
+            fi
+
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8091 2>/dev/null || echo "000")
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
+              echo "Aplicación respondiendo correctamente (HTTP $HTTP_CODE)"
+            else
+              echo "Aplicación iniciando... (HTTP $HTTP_CODE)"
+              echo "Seguir logs: journalctl -u $SERVICE_NAME -f"
+            fi
+
+  # ============================================
+  # JOB 3: Resultado del workflow
+  # ============================================
+  notify:
+    name: Resultado
+    needs: [build-native, deploy]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Deploy exitoso
+        if: ${{ needs.deploy.result == 'success' }}
+        run: |
+          echo "Native image deploy exitoso"
+          echo "Fecha: $(date)"
+
+      - name: Deploy fallido
+        if: ${{ needs.deploy.result == 'failure' }}
+        run: |
+          echo "Native image deploy fallido — revisar logs del workflow"
