@@ -5,6 +5,8 @@ import com.rentacaresv.settings.infrastructure.SettingsRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -25,7 +27,7 @@ public class SettingsCache {
     private Settings cachedSettings;
     private final Object lock = new Object();
 
-    @PostConstruct
+    @EventListener(ApplicationReadyEvent.class)
     public void init() {
         log.info("🚀 Inicializando cache de configuración...");
         loadSettings();
