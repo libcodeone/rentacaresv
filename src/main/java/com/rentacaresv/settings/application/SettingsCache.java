@@ -94,6 +94,13 @@ public class SettingsCache {
     }
 
     /**
+     * Obtiene la URL base de la aplicación desde cache
+     */
+    public String getBaseUrl() {
+        return getSettings().getBaseUrl();
+    }
+
+    /**
      * Obtiene el nombre de la empresa desde cache
      */
     public String getCompanyName() {

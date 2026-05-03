@@ -40,6 +40,13 @@ public class Settings implements Serializable {
     private String logoUrl;
 
     /**
+     * URL base de la aplicación (ej: https://rentacaresv.com)
+     * Usado para generar enlaces en correos
+     */
+    @Column(name = "base_url", length = 500)
+    private String baseUrl;
+
+    /**
      * Indica si las carpetas ya fueron inicializadas en DO Spaces
      */
     @Column(name = "folders_initialized", nullable = false)
@@ -260,6 +267,14 @@ public class Settings implements Serializable {
 
     public void setLogoUrl(String logoUrl) {
         this.logoUrl = logoUrl;
+    }
+
+    public String getBaseUrl() {
+        return baseUrl;
+    }
+
+    public void setBaseUrl(String baseUrl) {
+        this.baseUrl = baseUrl;
     }
 
     public Boolean getFoldersInitialized() {
