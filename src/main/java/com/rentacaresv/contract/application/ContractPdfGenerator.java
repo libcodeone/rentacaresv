@@ -130,15 +130,16 @@ public class ContractPdfGenerator {
         headerTable.setWidth(UnitValue.createPercentValue(100));
         headerTable.setBorder(Border.NO_BORDER);
 
-        // Logo (izquierda)
+        // Logo (izquierda) - carga ligera
         Cell logoCell = new Cell().setBorder(Border.NO_BORDER).setVerticalAlignment(VerticalAlignment.MIDDLE);
         String logoUrl = settingsCache.getLogoUrl();
         if (logoUrl != null && !logoUrl.isEmpty()) {
             try {
                 ImageData imageData = ImageDataFactory.create(new URL(logoUrl));
                 Image logo = new Image(imageData);
-                logo.setMaxHeight(55);
-                logo.setMaxWidth(110);
+                logo.setMaxHeight(45);  // Reducido de 55
+                logo.setMaxWidth(90);   // Reducido de 110
+                logo.setAutoScale(true);
                 logoCell.add(logo);
             } catch (Exception e) {
                 logoCell.add(new Paragraph(settingsCache.getCompanyName()).setBold().setFontSize(FONT_TITLE));
@@ -546,13 +547,14 @@ public class ContractPdfGenerator {
         Cell clientCell = new Cell().setBorder(Border.NO_BORDER).setTextAlignment(TextAlignment.CENTER)
                 .setPaddingLeft(30).setPaddingRight(30);
         
-        // Agregar imagen de firma si existe
+        // Agregar imagen de firma si existe - carga optimizada
         if (contract.getSignatureUrl() != null && !contract.getSignatureUrl().isEmpty()) {
             try {
                 ImageData signatureData = ImageDataFactory.create(new URL(contract.getSignatureUrl()));
                 Image signatureImg = new Image(signatureData);
-                signatureImg.setMaxHeight(70);
-                signatureImg.setMaxWidth(180);
+                signatureImg.setMaxHeight(50);  // Reducido de 70
+                signatureImg.setMaxWidth(140);  // Reducido de 180
+                signatureImg.setAutoScale(true);
                 signatureImg.setHorizontalAlignment(HorizontalAlignment.CENTER);
                 clientCell.add(signatureImg);
             } catch (Exception e) {
@@ -577,13 +579,14 @@ public class ContractPdfGenerator {
         Cell employeeCell = new Cell().setBorder(Border.NO_BORDER).setTextAlignment(TextAlignment.CENTER)
                 .setPaddingLeft(30).setPaddingRight(30);
         
-        // Agregar imagen de firma del empleado si existe
+        // Agregar imagen de firma del empleado si existe - carga optimizada
         if (contract.getEmployeeSignatureUrl() != null && !contract.getEmployeeSignatureUrl().isEmpty()) {
             try {
                 ImageData employeeSignatureData = ImageDataFactory.create(new URL(contract.getEmployeeSignatureUrl()));
                 Image employeeSignatureImg = new Image(employeeSignatureData);
-                employeeSignatureImg.setMaxHeight(70);
-                employeeSignatureImg.setMaxWidth(180);
+                employeeSignatureImg.setMaxHeight(50);  // Reducido de 70
+                employeeSignatureImg.setMaxWidth(140);  // Reducido de 180
+                employeeSignatureImg.setAutoScale(true);
                 employeeSignatureImg.setHorizontalAlignment(HorizontalAlignment.CENTER);
                 employeeCell.add(employeeSignatureImg);
             } catch (Exception e) {

@@ -110,6 +110,15 @@ jobs:
             sudo chown -R $USER:$USER $APP_DIR
             sudo chmod +x $APP_DIR/$JAR_NAME
             
+            echo "Configurando memoria para servidor de bajo recursos..."
+            if [ -f "/etc/systemd/system/$SERVICE_NAME.service" ]; then
+              sudo sed -i '/ExecStart=/ s/java /java -XX:MaxMetaspaceSize=128m -XX:+UseSerialGC /' /etc/systemd/system/$SERVICE_NAME.service
+              sudo systemctl daemon-reload
+              echo "Servicio actualizado con límites de memoria"
+            else
+              echo "Advertencia: No se encontró el archivo de servicio systemd"
+            fi
+            
             echo "Reiniciando servicio..."
             sudo systemctl restart $SERVICE_NAME
             echo "Servicio reiniciado via systemctl"
