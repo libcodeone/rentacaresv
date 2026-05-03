@@ -110,6 +110,15 @@ jobs:
             sudo chown -R $USER:$USER $APP_DIR
             sudo chmod +x $APP_DIR/$JAR_NAME
             
+            echo "Configurando memoria para servidor de bajo recursos..."
+            if [ -f "/etc/systemd/system/$SERVICE_NAME.service" ]; then
+              sudo sed -i '/ExecStart=/ s/java /java -XX:MaxMetaspaceSize=128m -XX:+UseSerialGC /' /etc/systemd/system/$SERVICE_NAME.service
+              sudo systemctl daemon-reload
+              echo "Servicio actualizado con límites de memoria"
+            else
+              echo "Advertencia: No se encontró el archivo de servicio systemd"
+            fi
+            
             echo "Reiniciando servicio..."
             sudo systemctl restart $SERVICE_NAME
             echo "Servicio reiniciado via systemctl"
@@ -135,7 +144,7 @@ jobs:
             
             MAX_RETRIES=30
             RETRY_INTERVAL=10
-            HEALTHY=false
+            APP_STATUS="DOWN"
             
             for i in $(seq 1 $MAX_RETRIES); do
               echo "Intento $i/$MAX_RETRIES - Verificando health endpoint..."
@@ -143,9 +152,10 @@ jobs:
               HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8091/actuator/health 2>/dev/null || echo "000")
               
               if [ "$HTTP_CODE" = "200" ]; then
-                HEALTHY=$(curl -s http://localhost:8091/actuator/health 2>/dev/null || echo "")
-                echo "✅ Aplicación lista y saludable (HTTP $HTTP_CODE)"
-                echo "Health response: $HEALTHY"
+                HEALTH_RESPONSE=$(curl -s http://localhost:8091/actuator/health 2>/dev/null || echo "")
+                APP_STATUS=$(echo "$HEALTH_RESPONSE" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
+                echo "✅ Aplicación respondió (HTTP $HTTP_CODE) - Status: $APP_STATUS"
+                echo "Health response: $HEALTH_RESPONSE"
                 
                 LIVENESS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8091/actuator/health/livenessState 2>/dev/null || echo "000")
                 READINESS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8091/actuator/health/readinessState 2>/dev/null || echo "000")
@@ -163,13 +173,15 @@ jobs:
               sleep $RETRY_INTERVAL
             done
             
-            if [ "$HEALTHY" != "true" ]; then
+            if [ "$APP_STATUS" != "UP" ]; then
               echo "❌ La aplicación no inició en $(( MAX_RETRIES * RETRY_INTERVAL )) segundos."
-              echo "Últimos 100 líneas de log:"
+              echo "Últimas 100 líneas de log:"
               tail -100 /opt/rentacaresv/logs/app.log 2>/dev/null || echo "No hay logs disponibles"
               exit 1
             fi
             
+            echo "=========================================="
+            echo "Deploy verificado exitosamente"
             echo "=========================================="
             echo "Deploy verificado exitosamente"
             echo "=========================================="
