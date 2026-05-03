@@ -6,6 +6,7 @@ import com.rentacaresv.settings.application.DynamicMailService;
 import com.rentacaresv.settings.application.SettingsCache;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,9 @@ public class ContractEmailService {
     private final SettingsCache settingsCache;
     private final ContractPdfGenerator pdfGenerator;
     private final ContractRepository contractRepository;
+
+    @Value("${app.base-url:http://localhost:8091}")
+    private String baseUrl;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
@@ -58,18 +62,14 @@ public class ContractEmailService {
 
             log.info("Enviando contrato firmado por email a: {}", customer.getEmail());
 
-            // Generar PDF
-            byte[] pdfBytes = pdfGenerator.generatePdf(fullContract);
-
             // Cuerpo del email en HTML
-            String htmlContent = buildEmailHtml(fullContract);
-            String subject = "Contrato de Alquiler - " + fullContract.getRental().getContractNumber();
-            String filename = "Contrato_" + fullContract.getRental().getContractNumber() + ".pdf";
-
-            // Enviar con adjunto
-            mailService.sendEmail(customer.getEmail(), subject, htmlContent, filename, pdfBytes);
-
-            log.info("✅ Email de contrato enviado exitosamente a: {}", customer.getEmail());
+             String htmlContent = buildEmailHtml(fullContract);
+             String subject = "Contrato de Alquiler - " + fullContract.getRental().getContractNumber();
+ 
+             // Enviar sin adjunto para ahorrar memoria (Metaspace limitado)
+             mailService.sendEmail(customer.getEmail(), subject, htmlContent);
+ 
+             log.info("✅ Email de contrato enviado exitosamente a: {}", customer.getEmail());
 
         } catch (Exception e) {
             log.error("Error enviando contrato por email: {}", e.getMessage(), e);
@@ -133,21 +133,45 @@ public class ContractEmailService {
         var customer = rental.getCustomer();
         String companyName = settingsCache.getCompanyName();
 
+        // Usar la URL directa de Spaces si está disponible, si no el API
+        String pdfUrl = (contract.getPdfUrl() != null && !contract.getPdfUrl().isBlank())
+                ? contract.getPdfUrl()
+                : baseUrl + "/api/contracts/" + contract.getId() + "/pdf";
+
         return """
                 <!DOCTYPE html>
                 <html>
                 <head>
                     <meta charset="UTF-8">
                     <style>
-                        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
                         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                        .header { background: #003366; color: white; padding: 20px; text-align: center; }
-                        .content { padding: 20px; background: #f9f9f9; }
-                        .info-box { background: white; padding: 15px; margin: 10px 0; border-radius: 8px; border-left: 4px solid #003366; }
-                        .success { background: #d4edda; border-left-color: #28a745; }
-                        .footer { text-align: center; padding: 20px; font-size: 12px; color: #666; }
-                        h1 { margin: 0; font-size: 24px; }
-                        h2 { color: #003366; font-size: 18px; }
+                        .header { background: #003366; color: white; padding: 24px 20px; text-align: center; border-radius: 8px 8px 0 0; }
+                        .header h1 { margin: 0; font-size: 22px; letter-spacing: 1px; }
+                        .header p { margin: 6px 0 0; font-size: 14px; opacity: 0.85; }
+                        .content { background: #f4f6f9; padding: 24px 20px; }
+                        .info-box { background: white; padding: 16px; margin: 12px 0; border-radius: 8px; border-left: 4px solid #003366; }
+                        .info-box.success { background: #f0faf4; border-left-color: #2e7d52; }
+                        .info-box h2 { margin: 0 0 8px; font-size: 16px; color: #003366; }
+                        .info-box.success h2 { color: #2e7d52; }
+                        .info-box p { margin: 4px 0; font-size: 14px; }
+                        .pdf-box { background: white; border-radius: 8px; padding: 28px 20px; text-align: center; margin: 12px 0; border: 1px solid #dde2ea; }
+                        .pdf-icon-big { font-size: 52px; display: block; margin-bottom: 10px; }
+                        .contract-num { font-size: 15px; font-weight: bold; color: #003366; margin: 0 0 18px; }
+                        .btn-download {
+                            display: inline-block;
+                            background: #003366;
+                            color: #ffffff !important;
+                            text-decoration: none;
+                            padding: 13px 32px;
+                            border-radius: 6px;
+                            font-size: 15px;
+                            font-weight: bold;
+                            letter-spacing: 0.5px;
+                        }
+                        .btn-download:hover { background: #00255a; }
+                        .hint { font-size: 12px; color: #888; margin: 12px 0 0; }
+                        .footer { text-align: center; padding: 20px; font-size: 12px; color: #999; }
                     </style>
                 </head>
                 <body>
@@ -159,29 +183,32 @@ public class ContractEmailService {
 
                         <div class="content">
                             <div class="info-box success">
-                                <h2>✅ ¡Contrato Firmado Exitosamente!</h2>
-                                <p>Estimado/a <strong>%s</strong>,</p>
-                                <p>Su contrato de alquiler ha sido firmado correctamente. Adjunto encontrará una copia del contrato en formato PDF.</p>
+                                <h2>✅ ¡Contrato Firmado!</h2>
+                                <p>Estimado/a <strong>%s</strong>, su contrato ha sido firmado correctamente. Puede descargarlo usando el botón a continuación.</p>
+                            </div>
+
+                            <div class="pdf-box">
+                                <span class="pdf-icon-big">📄</span>
+                                <p class="contract-num">Contrato %s</p>
+                                <a href="%s" class="btn-download">⬇&nbsp;&nbsp;Descargar contrato PDF</a>
+                                <p class="hint">Si el botón no funciona, copie y pegue el enlace en su navegador.</p>
                             </div>
 
                             <div class="info-box">
-                                <h2>📋 Detalles del Contrato</h2>
-                                <p><strong>Número de Contrato:</strong> %s</p>
-                                <p><strong>Vehículo:</strong> %s</p>
-                                <p><strong>Placa:</strong> %s</p>
+                                <h2>📋 Detalles</h2>
+                                <p><strong>Vehículo:</strong> %s &nbsp;|&nbsp; <strong>Placa:</strong> %s</p>
                                 <p><strong>Período:</strong> %s al %s</p>
                                 <p><strong>Total:</strong> $%s</p>
                             </div>
 
                             <div class="info-box">
                                 <h2>📞 Contacto</h2>
-                                <p>Si tiene alguna pregunta o necesita asistencia, no dude en contactarnos.</p>
+                                <p>Si tiene alguna pregunta, no dude en contactarnos.</p>
                             </div>
                         </div>
 
                         <div class="footer">
-                            <p>Este es un correo automático generado por el sistema de %s</p>
-                            <p>Por favor no responda a este correo.</p>
+                            <p>Correo automático generado por %s · Por favor no responda a este mensaje.</p>
                         </div>
                     </div>
                 </body>
@@ -191,6 +218,7 @@ public class ContractEmailService {
                         companyName,
                         customer.getFullName(),
                         rental.getContractNumber(),
+                        pdfUrl,
                         vehicle.getBrand() + " " + vehicle.getModel() + " " + vehicle.getYear(),
                         vehicle.getLicensePlate(),
                         rental.getStartDate().format(DATE_FORMAT),
