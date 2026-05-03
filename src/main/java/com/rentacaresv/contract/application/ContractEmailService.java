@@ -58,18 +58,14 @@ public class ContractEmailService {
 
             log.info("Enviando contrato firmado por email a: {}", customer.getEmail());
 
-            // Generar PDF
-            byte[] pdfBytes = pdfGenerator.generatePdf(fullContract);
-
             // Cuerpo del email en HTML
-            String htmlContent = buildEmailHtml(fullContract);
-            String subject = "Contrato de Alquiler - " + fullContract.getRental().getContractNumber();
-            String filename = "Contrato_" + fullContract.getRental().getContractNumber() + ".pdf";
-
-            // Enviar con adjunto
-            mailService.sendEmail(customer.getEmail(), subject, htmlContent, filename, pdfBytes);
-
-            log.info("✅ Email de contrato enviado exitosamente a: {}", customer.getEmail());
+             String htmlContent = buildEmailHtml(fullContract);
+             String subject = "Contrato de Alquiler - " + fullContract.getRental().getContractNumber();
+ 
+             // Enviar sin adjunto para ahorrar memoria (Metaspace limitado)
+             mailService.sendEmail(customer.getEmail(), subject, htmlContent);
+ 
+             log.info("✅ Email de contrato enviado exitosamente a: {}", customer.getEmail());
 
         } catch (Exception e) {
             log.error("Error enviando contrato por email: {}", e.getMessage(), e);
@@ -133,6 +129,9 @@ public class ContractEmailService {
         var customer = rental.getCustomer();
         String companyName = settingsCache.getCompanyName();
 
+        // Construir URL del PDF
+        String pdfUrl = settingsCache.getBaseUrl() + "/api/contracts/" + contract.getId() + "/pdf";
+
         return """
                 <!DOCTYPE html>
                 <html>
@@ -148,6 +147,35 @@ public class ContractEmailService {
                         .footer { text-align: center; padding: 20px; font-size: 12px; color: #666; }
                         h1 { margin: 0; font-size: 24px; }
                         h2 { color: #003366; font-size: 18px; }
+                        .pdf-button {
+                            display: inline-block;
+                            background: #dc3545;
+                            color: white;
+                            padding: 15px 30px;
+                            text-decoration: none;
+                            border-radius: 5px;
+                            margin: 20px 0;
+                            font-weight: bold;
+                            font-size: 16px;
+                            cursor: pointer;
+                            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+                            transition: all 0.3s;
+                        }
+                        .pdf-button:hover {
+                            background: #c82333;
+                            box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+                            transform: translateY(-2px);
+                        }
+                        .pdf-icon { margin-right: 10px; font-size: 20px; }
+                        .pdf-preview {
+                            background: #f8f9fa;
+                            border: 2px dashed #dc3545;
+                            border-radius: 8px;
+                            padding: 30px;
+                            text-align: center;
+                            margin: 15px 0;
+                        }
+                        .pdf-preview-icon { font-size: 48px; margin-bottom: 10px; }
                     </style>
                 </head>
                 <body>
@@ -161,12 +189,22 @@ public class ContractEmailService {
                             <div class="info-box success">
                                 <h2>✅ ¡Contrato Firmado Exitosamente!</h2>
                                 <p>Estimado/a <strong>%s</strong>,</p>
-                                <p>Su contrato de alquiler ha sido firmado correctamente. Adjunto encontrará una copia del contrato en formato PDF.</p>
+                                <p>Su contrato de alquiler ha sido firmado correctamente.</p>
+                            </div>
+
+                            <div class="pdf-preview">
+                                <div class="pdf-preview-icon">📄</div>
+                                <p><strong>Contrato: %s</strong></p>
+                                <a href="%s" class="pdf-button">
+                                    <span class="pdf-icon">⬇️</span>DESCARGAR PDF
+                                </a>
+                                <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                                    Haga clic en el botón para descargar su contrato en formato PDF
+                                </p>
                             </div>
 
                             <div class="info-box">
                                 <h2>📋 Detalles del Contrato</h2>
-                                <p><strong>Número de Contrato:</strong> %s</p>
                                 <p><strong>Vehículo:</strong> %s</p>
                                 <p><strong>Placa:</strong> %s</p>
                                 <p><strong>Período:</strong> %s al %s</p>
@@ -191,6 +229,7 @@ public class ContractEmailService {
                         companyName,
                         customer.getFullName(),
                         rental.getContractNumber(),
+                        pdfUrl,
                         vehicle.getBrand() + " " + vehicle.getModel() + " " + vehicle.getYear(),
                         vehicle.getLicensePlate(),
                         rental.getStartDate().format(DATE_FORMAT),
