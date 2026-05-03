@@ -1,9 +1,9 @@
-name: Build and Deploy RentaCar ESV
+name: Build and Deploy RentaCar ESV - TEST
 
 on:
   push:
-    branches: [ main, prod, nova_main ]
-  workflow_dispatch:  # Permite ejecución manual
+    branches: [ test ]
+  workflow_dispatch:
 
 env:
   JAVA_VERSION: '21'
@@ -11,9 +11,6 @@ env:
   DEPLOY_PATH: /opt/rentacaresv
 
 jobs:
-  # ============================================
-  # JOB 1: Build y Test
-  # ============================================
   build:
     name: Build & Test
     runs-on: ubuntu-latest
@@ -42,26 +39,23 @@ jobs:
       - name: Subir artefacto JAR
         uses: actions/upload-artifact@v4
         with:
-          name: app-jar
+          name: app-jar-test
           path: target/*.jar
           retention-days: 1
 
-  # ============================================
-  # JOB 2: Deploy a Servidor
-  # ============================================
   deploy:
-    name: Deploy to Server
+    name: Deploy to TEST Server
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/prod' || github.ref == 'refs/heads/nova_main'
+    if: github.ref == 'refs/heads/test'
     
-    environment: ${{ github.ref == 'refs/heads/nova_main' && 'nova_admin_rentacar' || 'rentacares_main' }}
+    environment: rentacares_test
     
     steps:
       - name: Descargar artefacto JAR
         uses: actions/download-artifact@v4
         with:
-          name: app-jar
+          name: app-jar-test
           path: ./target
 
       - name: Obtener nombre del JAR
@@ -93,77 +87,33 @@ jobs:
             set -e
             
             echo "=========================================="
-            echo "Iniciando deploy de RentaCar ESV"
+            echo "Iniciando deploy de RentaCar ESV - TEST"
             echo "=========================================="
             
-            # Variables
             APP_DIR="/opt/rentacaresv"
             JAR_NAME="rentacaresv.jar"
             SERVICE_NAME="rentacaresv"
             
-            # Crear directorio si no existe
             sudo mkdir -p $APP_DIR
             sudo mkdir -p $APP_DIR/logs
             sudo mkdir -p $APP_DIR/backup
             
-            # Backup del JAR anterior (si existe)
             if [ -f "$APP_DIR/$JAR_NAME" ]; then
               echo "Creando backup del JAR anterior..."
               sudo cp $APP_DIR/$JAR_NAME $APP_DIR/backup/$JAR_NAME.$(date +%Y%m%d_%H%M%S)
             fi
             
-            # Mover nuevo JAR
             echo "Moviendo nuevo JAR..."
             sudo mv $APP_DIR/temp/*.jar $APP_DIR/$JAR_NAME
             sudo rm -rf $APP_DIR/temp
             
-            # Dar permisos
             sudo chown -R $USER:$USER $APP_DIR
             sudo chmod +x $APP_DIR/$JAR_NAME
             
-            # Reiniciar servicio
             echo "Reiniciando servicio..."
-            if sudo systemctl is-active --quiet $SERVICE_NAME 2>/dev/null; then
-              sudo systemctl restart $SERVICE_NAME
-              echo "Servicio reiniciado via systemctl"
-            else
-              echo "Systemd no configurado. Iniciando manualmente..."
-              
-              # Desactivar set -e temporalmente para manejar kills
-              set +e
-              
-              # Detener procesos anteriores si existen
-              PIDS=$(pgrep -f "$JAR_NAME")
-              if [ -n "$PIDS" ]; then
-                echo "Deteniendo procesos anteriores: $PIDS"
-                echo "$PIDS" | xargs -r kill 2>/dev/null
-                sleep 5
-                # Forzar si siguen vivos
-                echo "$PIDS" | xargs -r kill -9 2>/dev/null
-                sleep 2
-              fi
-              
-              # Reactivar set -e
-              set -e
-              
-              # Cargar variables de entorno si existen
-              if [ -f "$APP_DIR/.env" ]; then
-                echo "Cargando variables de entorno..."
-                export $(grep -v '^#' $APP_DIR/.env | xargs)
-              fi
-              
-              # Iniciar aplicación en background con nohup
-              cd $APP_DIR
-              nohup java -jar $JAR_NAME --spring.profiles.active=prod > logs/app.log 2>&1 &
-              
-              NEW_PID=$!
-              echo "Aplicación iniciada con PID: $NEW_PID"
-              
-              # Desacoplar del proceso
-              disown $NEW_PID 2>/dev/null || true
-            fi
+            sudo systemctl restart $SERVICE_NAME
+            echo "Servicio reiniciado via systemctl"
             
-            # Limpiar backups antiguos (mantener últimos 5)
             if [ -d "$APP_DIR/backup" ]; then
               cd $APP_DIR/backup
               ls -t 2>/dev/null | tail -n +6 | xargs -r rm -- 2>/dev/null || true
@@ -224,25 +174,5 @@ jobs:
             echo "=========================================="
             echo "Deploy verificado exitosamente"
             echo "=========================================="
-
-  # ============================================
-  # JOB 3: Notificación (opcional)
-  # ============================================
-  notify:
-    name: Notificar resultado
-    needs: [build, deploy]
-    runs-on: ubuntu-latest
-    if: always()
-    
-    steps:
-      - name: Notificar éxito
-        if: ${{ needs.deploy.result == 'success' }}
-        run: |
-          echo "Deploy exitoso de RentaCar ESV"
-          echo "Fecha: $(date)"
-          
-      - name: Notificar fallo
-        if: ${{ needs.deploy.result == 'failure' }}
-        run: |
-          echo "Deploy fallido de RentaCar ESV"
-          echo "Revisar logs del workflow"
+            echo "Deploy verificado exitosamente"
+            echo "=========================================="
