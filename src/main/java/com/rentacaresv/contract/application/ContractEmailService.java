@@ -6,6 +6,7 @@ import com.rentacaresv.settings.application.DynamicMailService;
 import com.rentacaresv.settings.application.SettingsCache;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,9 @@ public class ContractEmailService {
     private final SettingsCache settingsCache;
     private final ContractPdfGenerator pdfGenerator;
     private final ContractRepository contractRepository;
+
+    @Value("${app.base-url:http://localhost:8091}")
+    private String baseUrl;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
@@ -130,7 +134,7 @@ public class ContractEmailService {
         String companyName = settingsCache.getCompanyName();
 
         // Construir URL del PDF
-        String pdfUrl = settingsCache.getBaseUrl() + "/api/contracts/" + contract.getId() + "/pdf";
+        String pdfUrl = baseUrl + "/api/contracts/" + contract.getId() + "/pdf";
 
         return """
                 <!DOCTYPE html>
