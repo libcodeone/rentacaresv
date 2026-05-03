@@ -238,6 +238,17 @@ public class ContractPdfGenerator {
         String theftDeductible = vehicle.getTheftDeductiblePercentage() + "% del valor";
         addCell(table, "Ded. Robo:", theftDeductible, 1);
 
+        // Fila 3: Horarios de entrega y devolución
+        DateTimeFormatter timeFmt = DateTimeFormatter.ofPattern("HH:mm");
+        String departureTime = contract.getDepartureTime() != null
+                ? rental.getStartDate().format(DATE_FMT) + " a las " + contract.getDepartureTime().format(timeFmt)
+                : "-";
+        String returnTime = contract.getReturnTime() != null
+                ? rental.getEndDate().format(DATE_FMT) + " a las " + contract.getReturnTime().format(timeFmt)
+                : "-";
+        addCell(table, "Hora de Entrega:", departureTime, 3);
+        addCell(table, "Hora Comprometida de Devolución:", returnTime, 3);
+
         document.add(table);
         document.add(new Paragraph().setMarginBottom(8));
     }

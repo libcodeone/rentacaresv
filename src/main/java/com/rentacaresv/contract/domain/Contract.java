@@ -303,6 +303,19 @@ public class Contract {
     @Column(name = "fuel_type_contract", length = 20)
     private String fuelTypeContract;
 
+    /**
+     * Indica si el vehículo fue devuelto en buen estado.
+     * Se marca desde el contrato firmado al confirmar la devolución.
+     */
+    @Column(name = "vehicle_returned_ok")
+    private Boolean vehicleReturnedOk;
+
+    /**
+     * Fecha y hora real en que se confirmó la devolución del vehículo.
+     */
+    @Column(name = "vehicle_returned_at")
+    private LocalDateTime vehicleReturnedAt;
+
     // ========================================
     // PDF generado
     // ========================================

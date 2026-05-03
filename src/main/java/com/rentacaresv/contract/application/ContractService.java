@@ -575,6 +575,23 @@ public class ContractService {
 
         log.info("✅ Contrato firmado con ambas firmas. ID: {}", contract.getId());
 
+        // Registrar la entrega del vehículo automáticamente al firmar
+        try {
+            Rental rental = contract.getRental();
+            if (rental.getStatus().canBeDelivered()) {
+                rental.deliverVehicle();
+                // Si se especificó una hora de salida, usarla en lugar de LocalDateTime.now()
+                if (contract.getDepartureTime() != null) {
+                    rental.setActualDeliveryDate(contract.getDepartureTime());
+                }
+                rentalRepository.save(rental);
+                log.info("🚗 Entrega registrada automáticamente al firmar contrato. Renta: {}",
+                        rental.getContractNumber());
+            }
+        } catch (Exception e) {
+            log.error("Error registrando entrega automática: {}", e.getMessage(), e);
+        }
+
         // Generar PDF y guardarlo
         try {
             contract = generateAndSavePdf(contract);
@@ -585,6 +602,58 @@ public class ContractService {
         } catch (Exception e) {
             log.error("Error generando PDF o enviando email: {}", e.getMessage(), e);
             // No lanzamos excepción para no bloquear la firma
+        }
+
+        return contract;
+    }
+
+    /**
+     * Guarda las horas de entrega y devolución del vehículo en el contrato.
+     */
+    @Transactional
+    public Contract updateDeliveryTimes(String token,
+            LocalDateTime departureTime,
+            LocalDateTime returnTime) {
+        Contract contract = findByToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("Contrato no encontrado"));
+
+        contract.setDepartureTime(departureTime);
+        contract.setReturnTime(returnTime);
+        return contractRepository.save(contract);
+    }
+
+    /**
+     * Confirma la devolución del vehículo desde el contrato firmado.
+     * Marca el vehículo como devuelto en buen estado y completa la renta.
+     */
+    @Transactional
+    public Contract confirmVehicleReturn(String token) {
+        Contract contract = findByToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("Contrato no encontrado"));
+
+        if (contract.getStatus() != ContractStatus.SIGNED) {
+            throw new IllegalStateException("Solo se puede confirmar devolución de un contrato firmado");
+        }
+
+        if (Boolean.TRUE.equals(contract.getVehicleReturnedOk())) {
+            throw new IllegalStateException("La devolución ya fue confirmada");
+        }
+
+        contract.setVehicleReturnedOk(true);
+        contract.setVehicleReturnedAt(LocalDateTime.now());
+        contractRepository.save(contract);
+
+        // Completar la renta
+        try {
+            Rental rental = contract.getRental();
+            if (rental.getStatus().canBeReturned()) {
+                rental.returnVehicle();
+                rentalRepository.save(rental);
+                log.info("✅ Devolución confirmada desde contrato. Renta: {}", rental.getContractNumber());
+            }
+        } catch (Exception e) {
+            log.error("Error completando renta en confirmación de devolución: {}", e.getMessage(), e);
+            throw new IllegalStateException("Error al completar la renta: " + e.getMessage());
         }
 
         return contract;

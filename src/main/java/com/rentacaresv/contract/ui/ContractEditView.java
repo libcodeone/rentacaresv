@@ -24,6 +24,7 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.component.timepicker.TimePicker;
 import com.vaadin.flow.component.upload.Upload;
 import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
 import com.vaadin.flow.router.*;
@@ -33,6 +34,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -116,6 +119,10 @@ public class ContractEditView extends VerticalLayout implements BeforeEnterObser
     private String documentFrontBase64;
     private String documentBackBase64;
 
+    // Horarios de entrega y devolución
+    private TimePicker departureTimePicker;
+    private TimePicker returnTimePicker;
+
     // Observaciones
     private TextArea observationsField;
 
@@ -183,12 +190,18 @@ public class ContractEditView extends VerticalLayout implements BeforeEnterObser
         mainContent.add(createClientSection());
         mainContent.add(createDocumentsSection());
         mainContent.add(createVehicleSection());
+        mainContent.add(createDeliveryTimesSection());
         mainContent.add(createPaymentSection());
         mainContent.add(createAccessoriesSection());
         mainContent.add(createPhysicalReviewSection());
         mainContent.add(createVideoSection());
         mainContent.add(createTermsSection());
         mainContent.add(createSignatureSection());
+
+        // Sección de devolución: solo visible en contratos ya firmados
+        if (isReadOnly && contract.getStatus() == com.rentacaresv.contract.domain.ContractStatus.SIGNED) {
+            mainContent.add(createReturnSection());
+        }
 
         populateFormWithContractData();
 
@@ -1009,6 +1022,148 @@ private VerticalLayout createVideoUploadSection(String title, String videoType, 
 }
 
     // ========================================
+    // SECCIÓN: Horarios de Entrega y Devolución
+    // ========================================
+
+    private Div createDeliveryTimesSection() {
+        Div section = createSection("HORARIOS DE ENTREGA Y DEVOLUCIÓN");
+
+        var rental = contract.getRental();
+        DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+
+        Paragraph info = new Paragraph(
+                "Período de renta: " + rental.getStartDate().format(dateFmt) +
+                " al " + rental.getEndDate().format(dateFmt));
+        info.getStyle().set("color", "var(--lumo-secondary-text-color)").set("margin-top", "0");
+        section.add(info);
+
+        FormLayout form = new FormLayout();
+        form.setResponsiveSteps(
+                new FormLayout.ResponsiveStep("0", 1),
+                new FormLayout.ResponsiveStep("500px", 2));
+
+        departureTimePicker = new TimePicker("Hora de entrega del vehículo");
+        departureTimePicker.setPlaceholder("Ej: 09:00");
+        departureTimePicker.setHelperText("Hora en que se entrega el vehículo al cliente (día " +
+                rental.getStartDate().format(dateFmt) + ")");
+        departureTimePicker.setReadOnly(isReadOnly);
+        departureTimePicker.setWidthFull();
+        form.add(departureTimePicker);
+
+        returnTimePicker = new TimePicker("Hora comprometida de devolución");
+        returnTimePicker.setPlaceholder("Ej: 09:00");
+        returnTimePicker.setHelperText("Hora a la que el cliente se compromete a devolver (día " +
+                rental.getEndDate().format(dateFmt) + ")");
+        returnTimePicker.setReadOnly(isReadOnly);
+        returnTimePicker.setWidthFull();
+        form.add(returnTimePicker);
+
+        section.add(form);
+        return section;
+    }
+
+    // ========================================
+    // SECCIÓN: Confirmación de Devolución (solo contrato firmado)
+    // ========================================
+
+    private Div createReturnSection() {
+        Div section = createSection("DEVOLUCIÓN DEL VEHÍCULO");
+
+        boolean alreadyReturned = Boolean.TRUE.equals(contract.getVehicleReturnedOk());
+
+        if (alreadyReturned) {
+            // Ya fue confirmada la devolución
+            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+            Div confirmedBox = new Div();
+            confirmedBox.getStyle()
+                    .set("background", "linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%)")
+                    .set("border", "2px solid #4CAF50")
+                    .set("border-radius", "var(--lumo-border-radius-m)")
+                    .set("padding", "var(--lumo-space-m)")
+                    .set("display", "flex")
+                    .set("align-items", "center")
+                    .set("gap", "var(--lumo-space-m)");
+
+            Span icon = new Span("✅");
+            icon.getStyle().set("font-size", "2em");
+
+            VerticalLayout info = new VerticalLayout();
+            info.setPadding(false);
+            info.setSpacing(false);
+            Span title = new Span("Vehículo devuelto en buen estado");
+            title.getStyle().set("font-weight", "bold").set("color", "#2E7D32");
+            String returnedAt = contract.getVehicleReturnedAt() != null
+                    ? "Confirmado el " + contract.getVehicleReturnedAt().format(fmt)
+                    : "Devolución confirmada";
+            Span dateSpan = new Span(returnedAt);
+            dateSpan.getStyle().set("font-size", "var(--lumo-font-size-s)").set("color", "#388E3C");
+            info.add(title, dateSpan);
+
+            confirmedBox.add(icon, info);
+            section.add(confirmedBox);
+
+        } else {
+            // Pendiente de confirmar devolución
+            if (contract.getReturnTime() != null) {
+                DateTimeFormatter timeFmt = DateTimeFormatter.ofPattern("HH:mm");
+                DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+                Paragraph scheduled = new Paragraph(
+                        "Devolución comprometida: " +
+                        contract.getRental().getEndDate().format(dateFmt) + " a las " +
+                        contract.getReturnTime().format(timeFmt));
+                scheduled.getStyle().set("color", "var(--lumo-secondary-text-color)");
+                section.add(scheduled);
+            }
+
+            Div warningBox = new Div();
+            warningBox.getStyle()
+                    .set("background", "linear-gradient(135deg, #FFF8E1 0%, #FFECB3 100%)")
+                    .set("border", "1px solid #FFC107")
+                    .set("border-radius", "var(--lumo-border-radius-m)")
+                    .set("padding", "var(--lumo-space-m)")
+                    .set("margin-bottom", "var(--lumo-space-m)");
+            warningBox.add(new Html(
+                    "<div style='font-size: var(--lumo-font-size-s);'>" +
+                    "<strong>⚠️ Pendiente:</strong> Confirme la devolución del vehículo cuando " +
+                    "el cliente lo entregue. Esto marcará la renta como completada.</div>"));
+            section.add(warningBox);
+
+            Checkbox returnedCheckbox = new Checkbox("El vehículo fue devuelto en buen estado");
+            returnedCheckbox.getStyle()
+                    .set("font-weight", "bold")
+                    .set("font-size", "var(--lumo-font-size-m)");
+            section.add(returnedCheckbox);
+
+            Button confirmReturnBtn = new Button("Confirmar Devolución", VaadinIcon.CHECK_CIRCLE.create());
+            confirmReturnBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SUCCESS);
+            confirmReturnBtn.setEnabled(false);
+            confirmReturnBtn.getStyle().set("margin-top", "var(--lumo-space-m)");
+
+            returnedCheckbox.addValueChangeListener(e ->
+                    confirmReturnBtn.setEnabled(e.getValue()));
+
+            confirmReturnBtn.addClickListener(e -> {
+                try {
+                    contractService.confirmVehicleReturn(token);
+                    Notification.show("✅ Devolución confirmada. La renta ha sido completada.",
+                            4000, Notification.Position.TOP_CENTER)
+                            .addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+                    // Recargar la vista
+                    UI.getCurrent().getPage().reload();
+                } catch (Exception ex) {
+                    log.error("Error confirmando devolución: {}", ex.getMessage(), ex);
+                    Notification.show("Error: " + ex.getMessage(), 4000, Notification.Position.MIDDLE)
+                            .addThemeVariants(NotificationVariant.LUMO_ERROR);
+                }
+            });
+
+            section.add(confirmReturnBtn);
+        }
+
+        return section;
+    }
+
+    // ========================================
     // SECCIÓN: Términos y Condiciones
     // ========================================
 
@@ -1393,6 +1548,14 @@ private VerticalLayout createVideoUploadSection(String title, String videoType, 
             documentNumberField.setValue(contract.getDocumentNumber());
         }
 
+        // Horarios de entrega y devolución
+        if (contract.getDepartureTime() != null && departureTimePicker != null) {
+            departureTimePicker.setValue(contract.getDepartureTime().toLocalTime());
+        }
+        if (contract.getReturnTime() != null && returnTimePicker != null) {
+            returnTimePicker.setValue(contract.getReturnTime().toLocalTime());
+        }
+
         // Cargar URL del video si existe
         if (contract.getVehicleExteriorVideoUrl() != null) {
             vehicleExteriorVideoUrl = contract.getVehicleExteriorVideoUrl();
@@ -1438,6 +1601,23 @@ private VerticalLayout createVideoUploadSection(String title, String videoType, 
     }
 
     private void saveFormData() {
+        // Guardar horas de entrega y devolución
+        var rental = contract.getRental();
+        LocalDateTime departureDateTime = null;
+        LocalDateTime returnDateTime = null;
+
+        if (departureTimePicker != null && departureTimePicker.getValue() != null) {
+            LocalTime depTime = departureTimePicker.getValue();
+            departureDateTime = rental.getStartDate().atTime(depTime);
+        }
+        if (returnTimePicker != null && returnTimePicker.getValue() != null) {
+            LocalTime retTime = returnTimePicker.getValue();
+            returnDateTime = rental.getEndDate().atTime(retTime);
+        }
+        if (departureDateTime != null || returnDateTime != null) {
+            contractService.updateDeliveryTimes(token, departureDateTime, returnDateTime);
+        }
+
         contractService.updateDocumentInfoWithPhotos(token,
                 documentTypeCombo.getValue(),
                 documentNumberField.getValue(),
