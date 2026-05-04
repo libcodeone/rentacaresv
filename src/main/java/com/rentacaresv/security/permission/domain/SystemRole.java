@@ -6,6 +6,7 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Entidad de Rol del Sistema (Domain Layer)
@@ -47,15 +48,14 @@ public class SystemRole {
     @Builder.Default
     private Boolean active = true;
 
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(
         name = "role_permissions",
-        joinColumns = @JoinColumn(name = "role_id")
+        joinColumns = @JoinColumn(name = "role_id"),
+        inverseJoinColumns = @JoinColumn(name = "permission_id")
     )
-    @Enumerated(EnumType.STRING)
-    @Column(name = "permission")
     @Builder.Default
-    private Set<Permission> permissions = new HashSet<>();
+    private Set<PermissionEntity> permissions = new HashSet<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
@@ -69,29 +69,30 @@ public class SystemRole {
     // ========================================
 
     /**
-     * Verifica si el rol tiene un permiso específico
+     * Verifica si el rol tiene un permiso específico (usando el enum como referencia)
      */
     public boolean hasPermission(Permission permission) {
-        return permissions != null && permissions.contains(permission);
+        return permissions != null && permissions.stream()
+                .anyMatch(p -> p.getName().equals(permission.name()));
     }
 
     /**
      * Agrega un permiso al rol
      */
-    public void addPermission(Permission permission) {
+    public void addPermission(PermissionEntity permissionEntity) {
         if (this.permissions == null) {
             this.permissions = new HashSet<>();
         }
-        this.permissions.add(permission);
+        this.permissions.add(permissionEntity);
         this.updatedAt = LocalDateTime.now();
     }
 
     /**
      * Remueve un permiso del rol
      */
-    public void removePermission(Permission permission) {
+    public void removePermission(PermissionEntity permissionEntity) {
         if (this.permissions != null) {
-            this.permissions.remove(permission);
+            this.permissions.remove(permissionEntity);
             this.updatedAt = LocalDateTime.now();
         }
     }
@@ -99,9 +100,19 @@ public class SystemRole {
     /**
      * Establece todos los permisos del rol
      */
-    public void setAllPermissions(Set<Permission> newPermissions) {
+    public void setAllPermissions(Set<PermissionEntity> newPermissions) {
         this.permissions = new HashSet<>(newPermissions);
         this.updatedAt = LocalDateTime.now();
+    }
+
+    /**
+     * Devuelve los permisos como set de enums (para compatibilidad con la UI)
+     */
+    public Set<Permission> getPermissionEnums() {
+        if (permissions == null) return new HashSet<>();
+        return permissions.stream()
+                .map(PermissionEntity::toEnum)
+                .collect(Collectors.toSet());
     }
 
     /**
