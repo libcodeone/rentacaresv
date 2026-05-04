@@ -123,7 +123,18 @@ DEALLOCATE PREPARE _stmt2;
 -- 8. Eliminar columna antigua permission (IF EXISTS para idempotencia)
 ALTER TABLE role_permissions DROP COLUMN IF EXISTS `permission`;
 
--- 9. Agregar FK permission_id → permission(id) (IF NOT EXISTS para idempotencia)
-ALTER TABLE role_permissions
-    ADD CONSTRAINT IF NOT EXISTS fk_rp_permission
-    FOREIGN KEY (permission_id) REFERENCES permission (id) ON DELETE CASCADE;
+-- 9. Agregar FK permission_id → permission(id) SOLO si no existe
+SET @fk_exists = (
+    SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+    WHERE TABLE_SCHEMA   = DATABASE()
+      AND TABLE_NAME     = 'role_permissions'
+      AND CONSTRAINT_NAME = 'fk_rp_permission'
+      AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+);
+SET @sql_add_fk = IF(@fk_exists = 0,
+    'ALTER TABLE role_permissions ADD CONSTRAINT fk_rp_permission FOREIGN KEY (permission_id) REFERENCES permission (id) ON DELETE CASCADE',
+    'SELECT 1 /* FK fk_rp_permission ya existe */'
+);
+PREPARE _stmt_fk FROM @sql_add_fk;
+EXECUTE _stmt_fk;
+DEALLOCATE PREPARE _stmt_fk;
