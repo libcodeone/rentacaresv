@@ -1,8 +1,8 @@
 -- V013: Refactoriza permisos de columna ENUM a tabla relacional con FKs
--- Idempotente: usa IF NOT EXISTS / IF EXISTS / INSERT IGNORE para tolerar
--- tablas pre-creadas por Hibernate (ddl-auto=update en entornos de desarrollo).
+-- Totalmente idempotente: usa IF NOT EXISTS / IF EXISTS / DDL condicional
+-- para tolerar ejecuciones parciales previas en cualquier estado.
 
--- 1. Crear tabla permission (IF NOT EXISTS por si Hibernate ya la creó)
+-- 1. Crear tabla permission (IF NOT EXISTS por si ya existe)
 CREATE TABLE IF NOT EXISTS permission (
     id           BIGINT       NOT NULL AUTO_INCREMENT,
     name         VARCHAR(100) NOT NULL,
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS permission (
     UNIQUE KEY uk_permission_name (name)
 );
 
--- 2. Insertar permisos (INSERT IGNORE omite duplicados si ya existen)
+-- 2. Insertar permisos (INSERT IGNORE omite duplicados)
 INSERT IGNORE INTO permission (name, display_name, description, category) VALUES
 -- Vehículos
 ('VEHICLE_VIEW',    'Ver vehículos',      'Permite ver el listado de vehículos',             'Vehículos'),
@@ -69,26 +69,52 @@ INSERT IGNORE INTO permission (name, display_name, description, category) VALUES
 ('SECURITY_ROLES',       'Gestionar roles',         'Permite crear y modificar roles del sistema', 'Seguridad'),
 ('SECURITY_PERMISSIONS', 'Gestionar permisos',      'Permite asignar permisos a roles',            'Seguridad');
 
--- 3. Agregar columna permission_id a role_permissions (IF NOT EXISTS para idempotencia)
+-- 3. Agregar columna permission_id si no existe
 ALTER TABLE role_permissions ADD COLUMN IF NOT EXISTS permission_id BIGINT NULL;
 
--- 4. Poblar permission_id haciendo JOIN por nombre del permiso
+-- 4. Poblar permission_id donde falte
 UPDATE role_permissions rp
 INNER JOIN permission p ON p.name = rp.permission
 SET rp.permission_id = p.id
 WHERE rp.permission_id IS NULL;
 
--- 5. Eliminar el PRIMARY KEY actual (role_id, permission)
-ALTER TABLE role_permissions DROP PRIMARY KEY;
+-- 5. Eliminar PRIMARY KEY SOLO si existe actualmente
+SET @pk_exists = (
+    SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME   = 'role_permissions'
+      AND CONSTRAINT_TYPE = 'PRIMARY KEY'
+);
+SET @sql_drop_pk = IF(@pk_exists > 0,
+    'ALTER TABLE role_permissions DROP PRIMARY KEY',
+    'SELECT 1 /* PRIMARY KEY ya eliminado */'
+);
+PREPARE _stmt FROM @sql_drop_pk;
+EXECUTE _stmt;
+DEALLOCATE PREPARE _stmt;
 
--- 6. Hacer permission_id NOT NULL y establecer nuevo PK (role_id, permission_id)
+-- 6. Hacer permission_id NOT NULL
 ALTER TABLE role_permissions MODIFY COLUMN permission_id BIGINT NOT NULL;
-ALTER TABLE role_permissions ADD PRIMARY KEY (role_id, permission_id);
 
--- 7. Eliminar columna antigua (IF EXISTS para idempotencia)
-ALTER TABLE role_permissions DROP COLUMN IF EXISTS permission;
+-- 7. Agregar nuevo PK (role_id, permission_id) SOLO si no existe
+SET @new_pk_exists = (
+    SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME   = 'role_permissions'
+      AND CONSTRAINT_TYPE = 'PRIMARY KEY'
+);
+SET @sql_add_pk = IF(@new_pk_exists = 0,
+    'ALTER TABLE role_permissions ADD PRIMARY KEY (role_id, permission_id)',
+    'SELECT 1 /* PRIMARY KEY ya creado */'
+);
+PREPARE _stmt2 FROM @sql_add_pk;
+EXECUTE _stmt2;
+DEALLOCATE PREPARE _stmt2;
 
--- 8. Agregar FK de permission_id → permission(id)  (IF NOT EXISTS para idempotencia)
+-- 8. Eliminar columna antigua permission (IF EXISTS para idempotencia)
+ALTER TABLE role_permissions DROP COLUMN IF EXISTS `permission`;
+
+-- 9. Agregar FK permission_id → permission(id) (IF NOT EXISTS para idempotencia)
 ALTER TABLE role_permissions
     ADD CONSTRAINT IF NOT EXISTS fk_rp_permission
     FOREIGN KEY (permission_id) REFERENCES permission (id) ON DELETE CASCADE;
