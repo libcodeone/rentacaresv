@@ -265,7 +265,7 @@ public class RolesPermissionsView extends VerticalLayout {
 
         // Obtener permisos agrupados por categoría
         Map<String, List<Permission>> permissionsByCategory = rolePermissionService.getPermissionsByCategory();
-        Set<Permission> currentPermissions = new HashSet<>(role.getPermissions());
+        Set<Permission> currentPermissions = role.getPermissionEnums();
         Set<Permission> selectedPermissions = new HashSet<>(currentPermissions);
 
         VerticalLayout content = new VerticalLayout();
