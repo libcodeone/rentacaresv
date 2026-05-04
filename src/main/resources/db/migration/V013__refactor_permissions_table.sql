@@ -72,11 +72,20 @@ INSERT IGNORE INTO permission (name, display_name, description, category) VALUES
 -- 3. Agregar columna permission_id si no existe
 ALTER TABLE role_permissions ADD COLUMN IF NOT EXISTS permission_id BIGINT NULL;
 
--- 4. Poblar permission_id donde falte
-UPDATE role_permissions rp
-INNER JOIN permission p ON p.name = rp.permission
-SET rp.permission_id = p.id
-WHERE rp.permission_id IS NULL;
+-- 4. Poblar permission_id donde falte (SOLO si la columna 'permission' aún existe)
+SET @old_col_exists = (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME   = 'role_permissions'
+      AND COLUMN_NAME  = 'permission'
+);
+SET @sql_update = IF(@old_col_exists > 0,
+    'UPDATE role_permissions rp INNER JOIN permission p ON p.name = rp.permission SET rp.permission_id = p.id WHERE rp.permission_id IS NULL',
+    'SELECT 1 /* columna permission ya eliminada, nada que poblar */'
+);
+PREPARE _stmt_upd FROM @sql_update;
+EXECUTE _stmt_upd;
+DEALLOCATE PREPARE _stmt_upd;
 
 -- 5. Eliminar PRIMARY KEY SOLO si existe actualmente
 SET @pk_exists = (
